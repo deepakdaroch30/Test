@@ -15,9 +15,6 @@ class Settings(BaseSettings):
 
     encryption_key: str = "local-dev-encryption-key"
 
-    admin_email: str = "admin@acme.com"
-    admin_password: str = "Admin@123"
-
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

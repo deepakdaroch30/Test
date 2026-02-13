@@ -6,16 +6,6 @@ from pydantic import BaseModel, Field
 class ToolType(str, Enum):
     jira = "JIRA"
     azure_devops = "AZURE_DEVOPS"
-    qtest = "QTEST"
-    zephyr = "ZEPHYR"
-    testrail = "TESTRAIL"
-
-
-class AuthType(str, Enum):
-    basic = "BASIC"
-    oauth2 = "OAUTH2"
-    pat = "PAT"
-    token = "TOKEN"
 
 
 class IntegrationState(str, Enum):
@@ -27,9 +17,12 @@ class IntegrationState(str, Enum):
 class IntegrationTestRequest(BaseModel):
     tenant_id: str
     tool_type: ToolType
-    auth_type: AuthType
     base_url: str
-    credentials: dict[str, str]
+    client_id: str | None = None
+    client_secret: str | None = None
+    api_token: str | None = None
+    tenant_identifier: str | None = None
+    personal_access_token: str | None = None
     webhook_secret: str
 
 
@@ -41,7 +34,6 @@ class IntegrationSaveRequest(IntegrationTestRequest):
 class IntegrationStatusResponse(BaseModel):
     tenant_id: str
     tool_type: ToolType | None = None
-    auth_type: AuthType | None = None
     integration_status: IntegrationState
     last_successful_sync: str | None = None
     last_tested_timestamp: str | None = None

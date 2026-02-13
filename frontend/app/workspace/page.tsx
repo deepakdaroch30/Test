@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import TopMenu from "../components/top-menu";
 
 type IntegrationType = "JIRA" | "AZURE_DEVOPS";
 type SprintHealth = "green" | "amber" | "red";
@@ -129,7 +128,6 @@ export default function WorkspaceDashboardPage() {
 
   return (
     <main className="workspace-shell">
-      <TopMenu current="workspace" />
       <header className="workspace-header">
         <div>
           <h1>{model.workspace_name}</h1>
