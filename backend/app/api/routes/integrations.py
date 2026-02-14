@@ -9,6 +9,7 @@ from fastapi import APIRouter, Header, HTTPException
 
 from app.core.config import settings
 from app.schemas.integration_config import (
+    AuthType,
     IntegrationActionResponse,
     IntegrationSaveRequest,
     IntegrationState,
@@ -19,6 +20,30 @@ from app.schemas.integration_config import (
 router = APIRouter()
 
 TENANT_INTEGRATIONS: dict[str, dict[str, Any]] = {}
+
+REQUIRED_CREDENTIALS: dict[str, dict[str, list[str]]] = {
+    "JIRA": {
+        "BASIC": ["username", "api_token"],
+        "OAUTH2": ["client_id", "client_secret"],
+        "TOKEN": ["api_token"],
+    },
+    "AZURE_DEVOPS": {
+        "PAT": ["personal_access_token"],
+        "OAUTH2": ["tenant_id", "client_id", "client_secret"],
+    },
+    "QTEST": {
+        "TOKEN": ["api_token"],
+        "OAUTH2": ["client_id", "client_secret"],
+    },
+    "ZEPHYR": {
+        "TOKEN": ["api_token"],
+        "BASIC": ["username", "password"],
+    },
+    "TESTRAIL": {
+        "BASIC": ["username", "api_token"],
+        "TOKEN": ["api_token"],
+    },
+}
 
 
 def _require_admin(role: str) -> None:
@@ -39,6 +64,15 @@ def _validate_https(url: str) -> None:
         raise HTTPException(status_code=400, detail="Only HTTPS endpoints are allowed for integration URLs.")
 
 
+def _validate_auth(tool_type: str, auth_type: str, credentials: dict[str, str]) -> None:
+    allowed = REQUIRED_CREDENTIALS.get(tool_type, {})
+    if auth_type not in allowed:
+        raise HTTPException(status_code=400, detail=f"Auth type {auth_type} is not supported for {tool_type}.")
+    missing = [key for key in allowed[auth_type] if not credentials.get(key)]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing credential fields: {', '.join(missing)}")
+
+
 @router.get("/jira/projects")
 def list_jira_projects() -> list[dict[str, str]]:
     return [{"key": "QA", "name": "QA Platform"}]
@@ -56,6 +90,7 @@ def test_integration(
 ) -> IntegrationActionResponse:
     _require_admin(x_user_role)
     _validate_https(payload.base_url)
+    _validate_auth(payload.tool_type.value, payload.auth_type.value, payload.credentials)
 
     if "fail" in payload.base_url:
         return IntegrationActionResponse(status="error", message="Connection failed: Unable to authenticate to remote API.")
@@ -66,6 +101,7 @@ def test_integration(
         **current,
         "tenant_id": payload.tenant_id,
         "tool_type": payload.tool_type.value,
+        "auth_type": payload.auth_type.value,
         "base_url": payload.base_url,
         "integration_status": IntegrationState.connected.value,
         "last_tested_timestamp": tested_at,
@@ -82,6 +118,7 @@ def save_integration(
 ) -> IntegrationActionResponse:
     _require_admin(x_user_role)
     _validate_https(payload.base_url)
+    _validate_auth(payload.tool_type.value, payload.auth_type.value, payload.credentials)
 
     existing = TENANT_INTEGRATIONS.get(payload.tenant_id)
     if existing and existing.get("tool_type") != payload.tool_type.value and not payload.reset_confirmed:
@@ -90,14 +127,14 @@ def save_integration(
     if not existing or not existing.get("connection_tested"):
         raise HTTPException(status_code=400, detail="Test Connection must succeed before saving configuration.")
 
+    encrypted_credentials = {key: _encrypt(value) for key, value in payload.credentials.items()}
+
     stored = {
         "tenant_id": payload.tenant_id,
         "tool_type": payload.tool_type.value,
+        "auth_type": payload.auth_type.value,
         "base_url": payload.base_url,
-        "encrypted_credentials": {
-            "client_secret": _encrypt(payload.client_secret or ""),
-            "api_token": _encrypt(payload.api_token or payload.personal_access_token or ""),
-        },
+        "encrypted_credentials": encrypted_credentials,
         "webhook_secret": _encrypt(payload.webhook_secret),
         "integration_status": IntegrationState.connected.value,
         "last_successful_sync": datetime.now(timezone.utc).isoformat(),
@@ -121,6 +158,7 @@ def get_integration_status(
         return IntegrationStatusResponse(
             tenant_id=tenant_id,
             tool_type=None,
+            auth_type=None,
             integration_status=IntegrationState.disconnected,
             last_successful_sync=None,
             last_tested_timestamp=None,
@@ -132,6 +170,7 @@ def get_integration_status(
     return IntegrationStatusResponse(
         tenant_id=tenant_id,
         tool_type=stored.get("tool_type"),
+        auth_type=stored.get("auth_type"),
         integration_status=stored.get("integration_status", IntegrationState.disconnected),
         last_successful_sync=stored.get("last_successful_sync"),
         last_tested_timestamp=stored.get("last_tested_timestamp"),

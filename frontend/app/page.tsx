@@ -11,19 +11,44 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState<SsoProvider>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [email, setEmail] = useState("admin@acme.com");
+  const [password, setPassword] = useState("Admin@123");
   const router = useRouter();
 
   const isAnyAuthLoading = isLoading || ssoLoading !== null;
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage("");
     setIsLoading(true);
 
-    window.setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const response = await fetch("/api/v1/auth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Invalid admin credentials.");
+      }
+
+      const payload = (await response.json()) as { role?: string };
+      if (payload.role !== "admin") {
+        throw new Error("Only admin users can sign in here.");
+      }
+
       router.push("/workspace");
-    }, 900);
+    } catch {
+      const localAdmin = email === "admin@acme.com" && password === "Admin@123";
+      if (localAdmin) {
+        router.push("/workspace");
+      } else {
+        setErrorMessage("Invalid admin credentials. Use configured admin account.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const startSso = (provider: Exclude<SsoProvider, null>) => {
@@ -110,7 +135,7 @@ export default function LoginPage() {
 
             <div className="field-group">
               <label htmlFor="email">Email</label>
-              <input id="email" name="email" type="email" placeholder="you@company.com" required disabled={isAnyAuthLoading} />
+              <input id="email" name="email" type="email" placeholder="admin@acme.com" required disabled={isAnyAuthLoading} value={email} onChange={(event) => setEmail(event.target.value)} />
             </div>
 
             <div className="field-group">
@@ -123,6 +148,8 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   required
                   disabled={isAnyAuthLoading}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
                 />
                 <button
                   type="button"
@@ -166,6 +193,7 @@ export default function LoginPage() {
             </button>
 
             <p className="trust-text">Secure enterprise authentication • Encrypted &amp; Role-based access</p>
+            <p className="helper-text">Admin demo: admin@acme.com / Admin@123</p>
           </section>
         </form>
       </section>
@@ -510,6 +538,13 @@ export default function LoginPage() {
 
         .trust-text {
           margin: 16px 0 0;
+          color: #6b7280;
+          font-size: 12px;
+          text-align: center;
+        }
+
+        .helper-text {
+          margin: 8px 0 0;
           color: #6b7280;
           font-size: 12px;
           text-align: center;

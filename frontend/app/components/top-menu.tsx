@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 type Props = {
-  current: "workspace" | "integration" | "project";
+  current: "workspace" | "integration" | "project" | "requirements";
 };
 
 export default function TopMenu({ current }: Props) {
@@ -17,6 +17,9 @@ export default function TopMenu({ current }: Props) {
       </Link>
       <Link href="/project/tenant-acme-JIRA-101/overview" className={current === "project" ? "active" : ""}>
         Project Overview
+      </Link>
+      <Link href="/requirements" className={current === "requirements" ? "active" : ""}>
+        Requirements Intake
       </Link>
 
       <style jsx>{`

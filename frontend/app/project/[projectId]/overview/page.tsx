@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import TopMenu from "../../../components/top-menu";
 
 type ToolType = "JIRA" | "AZURE_DEVOPS";
 
@@ -129,6 +130,7 @@ export default function ProjectOverviewPage() {
 
   return (
     <main className="overview-shell">
+      <TopMenu current="project" />
       <header className="overview-header">
         <div>
           <h1>{model.project_name}</h1>

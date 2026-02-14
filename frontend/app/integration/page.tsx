@@ -1,13 +1,16 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import TopMenu from "../components/top-menu";
 
-type ToolType = "JIRA" | "AZURE_DEVOPS";
+type ToolType = "JIRA" | "AZURE_DEVOPS" | "QTEST" | "ZEPHYR" | "TESTRAIL";
+type AuthType = "BASIC" | "OAUTH2" | "PAT" | "TOKEN";
 type Status = "connected" | "disconnected" | "token_expired";
 
 type IntegrationStatus = {
   tenant_id: string;
   tool_type: ToolType | null;
+  auth_type: AuthType | null;
   integration_status: Status;
   last_successful_sync: string | null;
   last_tested_timestamp: string | null;
@@ -16,9 +19,42 @@ type IntegrationStatus = {
   configuration_locked: boolean;
 };
 
+type FieldConfig = { key: string; label: string; sensitive?: boolean; optional?: boolean; placeholder?: string };
+
+const TOOL_AUTH_OPTIONS: Record<ToolType, AuthType[]> = {
+  JIRA: ["BASIC", "OAUTH2", "TOKEN"],
+  AZURE_DEVOPS: ["PAT", "OAUTH2"],
+  QTEST: ["TOKEN", "OAUTH2"],
+  ZEPHYR: ["TOKEN", "BASIC"],
+  TESTRAIL: ["BASIC", "TOKEN"],
+};
+
+const AUTH_FIELDS: Record<AuthType, FieldConfig[]> = {
+  BASIC: [
+    { key: "username", label: "Username / Email" },
+    { key: "password", label: "Password / API Token", sensitive: true },
+  ],
+  OAUTH2: [
+    { key: "tenant_id", label: "Tenant ID", optional: true },
+    { key: "client_id", label: "Client ID" },
+    { key: "client_secret", label: "Client Secret", sensitive: true },
+  ],
+  PAT: [{ key: "personal_access_token", label: "Personal Access Token", sensitive: true }],
+  TOKEN: [{ key: "api_token", label: "API Token", sensitive: true }],
+};
+
+const TOOL_BASE_URL_LABEL: Record<ToolType, string> = {
+  JIRA: "Jira Base URL",
+  AZURE_DEVOPS: "Organization URL",
+  QTEST: "qTest Base URL",
+  ZEPHYR: "Zephyr Base URL",
+  TESTRAIL: "TestRail Base URL",
+};
+
 const initialStatus: IntegrationStatus = {
   tenant_id: "tenant-acme",
   tool_type: null,
+  auth_type: null,
   integration_status: "disconnected",
   last_successful_sync: null,
   last_tested_timestamp: null,
@@ -30,6 +66,7 @@ const initialStatus: IntegrationStatus = {
 export default function IntegrationConfigurationPage() {
   const [tenantId] = useState("tenant-acme");
   const [toolType, setToolType] = useState<ToolType>("JIRA");
+  const [authType, setAuthType] = useState<AuthType>("BASIC");
   const [connectionTestPassed, setConnectionTestPassed] = useState(false);
   const [status, setStatus] = useState<IntegrationStatus>(initialStatus);
   const [feedback, setFeedback] = useState<{ tone: "ok" | "error" | "warn"; text: string } | null>(null);
@@ -38,28 +75,33 @@ export default function IntegrationConfigurationPage() {
   const [isRunningAction, setIsRunningAction] = useState(false);
   const [form, setForm] = useState({
     base_url: "",
-    client_id: "",
-    client_secret: "",
-    api_token: "",
-    tenant_identifier: "",
-    personal_access_token: "",
     webhook_secret: "",
     default_project: "",
     reset_confirmed: false,
+    credentials: {} as Record<string, string>,
   });
 
   const lockedToDifferentTool = status.configuration_locked && status.tool_type && status.tool_type !== toolType;
 
   const commonHeaders = useMemo(
-    () => ({
-      "Content-Type": "application/json",
-      "x-user-role": "admin",
-    }),
+    () => ({ "Content-Type": "application/json", "x-user-role": "admin" }),
     [],
   );
 
-  const updateField = (field: keyof typeof form, value: string | boolean) => {
-    setForm((current) => ({ ...current, [field]: value }));
+  const activeAuthFields = AUTH_FIELDS[authType];
+
+  useEffect(() => {
+    const nextAuth = TOOL_AUTH_OPTIONS[toolType][0];
+    setAuthType((prev) => (TOOL_AUTH_OPTIONS[toolType].includes(prev) ? prev : nextAuth));
+    setForm((current) => ({ ...current, credentials: {} }));
+    setConnectionTestPassed(false);
+  }, [toolType]);
+
+  const updateCredential = (key: string, value: string) => {
+    setForm((current) => ({
+      ...current,
+      credentials: { ...current.credentials, [key]: value },
+    }));
   };
 
   const fetchStatus = async () => {
@@ -68,7 +110,12 @@ export default function IntegrationConfigurationPage() {
     const payload = (await response.json()) as IntegrationStatus;
     setStatus(payload);
     if (payload.tool_type) setToolType(payload.tool_type);
+    if (payload.auth_type) setAuthType(payload.auth_type);
   };
+
+  useEffect(() => {
+    void fetchStatus();
+  }, []);
 
   const onTestConnection = async (event: FormEvent) => {
     event.preventDefault();
@@ -78,12 +125,9 @@ export default function IntegrationConfigurationPage() {
       const payload = {
         tenant_id: tenantId,
         tool_type: toolType,
+        auth_type: authType,
         base_url: form.base_url,
-        client_id: form.client_id || null,
-        client_secret: form.client_secret || null,
-        api_token: toolType === "JIRA" ? form.api_token || null : null,
-        tenant_identifier: toolType === "AZURE_DEVOPS" ? form.tenant_identifier || null : null,
-        personal_access_token: toolType === "AZURE_DEVOPS" ? form.personal_access_token || null : null,
+        credentials: form.credentials,
         webhook_secret: form.webhook_secret,
       };
 
@@ -115,12 +159,9 @@ export default function IntegrationConfigurationPage() {
       const payload = {
         tenant_id: tenantId,
         tool_type: toolType,
+        auth_type: authType,
         base_url: form.base_url,
-        client_id: form.client_id || null,
-        client_secret: form.client_secret || null,
-        api_token: toolType === "JIRA" ? form.api_token || null : null,
-        tenant_identifier: toolType === "AZURE_DEVOPS" ? form.tenant_identifier || null : null,
-        personal_access_token: toolType === "AZURE_DEVOPS" ? form.personal_access_token || null : null,
+        credentials: form.credentials,
         webhook_secret: form.webhook_secret,
         default_project: form.default_project || null,
         reset_confirmed: form.reset_confirmed,
@@ -135,7 +176,7 @@ export default function IntegrationConfigurationPage() {
       if (!response.ok) throw new Error(result.detail || "Unable to save configuration");
 
       setFeedback({ tone: "ok", text: result.message || "Integration configuration saved securely." });
-      setForm((current) => ({ ...current, client_secret: "", api_token: "", personal_access_token: "", webhook_secret: "" }));
+      setForm((current) => ({ ...current, webhook_secret: "", credentials: {} }));
       await fetchStatus();
     } catch (error) {
       setFeedback({ tone: "error", text: error instanceof Error ? error.message : "Save failed" });
@@ -172,6 +213,7 @@ export default function IntegrationConfigurationPage() {
 
   return (
     <main className="config-shell">
+      <TopMenu current="integration" />
       <header className="header">
         <div>
           <h1>Integration Configuration</h1>
@@ -185,37 +227,42 @@ export default function IntegrationConfigurationPage() {
 
       <section className="card">
         <h2>Primary Tool Selection</h2>
-        {status.configuration_locked && (
-          <p className="warn-text">Changing primary tool will reset all integration mappings.</p>
-        )}
-        <div className="radio-row">
+        {status.configuration_locked && <p className="warn-text">Changing primary tool will reset all integration mappings.</p>}
+
+        <div className="grid two">
           <label>
-            <input
-              type="radio"
-              name="toolType"
-              checked={toolType === "JIRA"}
-              onChange={() => setToolType("JIRA")}
+            Tool Type
+            <select
+              value={toolType}
+              onChange={(event) => setToolType(event.target.value as ToolType)}
               disabled={Boolean(lockedToDifferentTool && !form.reset_confirmed)}
-            />
-            Jira
+            >
+              <option value="JIRA">Jira</option>
+              <option value="AZURE_DEVOPS">Azure DevOps</option>
+              <option value="QTEST">qTest</option>
+              <option value="ZEPHYR">Zephyr</option>
+              <option value="TESTRAIL">TestRail</option>
+            </select>
           </label>
+
           <label>
-            <input
-              type="radio"
-              name="toolType"
-              checked={toolType === "AZURE_DEVOPS"}
-              onChange={() => setToolType("AZURE_DEVOPS")}
-              disabled={Boolean(lockedToDifferentTool && !form.reset_confirmed)}
-            />
-            Azure DevOps
+            Authentication Type
+            <select value={authType} onChange={(event) => setAuthType(event.target.value as AuthType)}>
+              {TOOL_AUTH_OPTIONS[toolType].map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
+
         {status.configuration_locked && status.tool_type !== toolType && (
           <label className="reset-check">
             <input
               type="checkbox"
               checked={form.reset_confirmed}
-              onChange={(event) => updateField("reset_confirmed", event.target.checked)}
+              onChange={(event) => setForm((current) => ({ ...current, reset_confirmed: event.target.checked }))}
             />
             I understand and want to reset integration mappings.
           </label>
@@ -223,56 +270,38 @@ export default function IntegrationConfigurationPage() {
       </section>
 
       <form className="card" onSubmit={onTestConnection}>
-        <h2>{toolType === "JIRA" ? "Jira Configuration" : "Azure DevOps Configuration"}</h2>
+        <h2>{toolType} Configuration ({authType})</h2>
 
         <div className="grid two">
           <label>
-            {toolType === "JIRA" ? "Jira Base URL" : "Organization URL"}
+            {TOOL_BASE_URL_LABEL[toolType]}
             <input
               required
-              placeholder={toolType === "JIRA" ? "https://client.atlassian.net" : "https://dev.azure.com/client"}
+              placeholder="https://"
               value={form.base_url}
-              onChange={(event) => updateField("base_url", event.target.value)}
+              onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))}
             />
           </label>
 
-          {toolType === "AZURE_DEVOPS" && (
-            <label>
-              Tenant ID
-              <input value={form.tenant_identifier} onChange={(event) => updateField("tenant_identifier", event.target.value)} />
-            </label>
-          )}
-
-          <label>
-            Client ID
-            <input value={form.client_id} onChange={(event) => updateField("client_id", event.target.value)} />
-          </label>
-
-          <label>
-            Client Secret
-            <input type="password" autoComplete="new-password" value={form.client_secret} onChange={(event) => updateField("client_secret", event.target.value)} />
-          </label>
-
-          {toolType === "JIRA" ? (
-            <label>
-              API Token
-              <input type="password" autoComplete="new-password" value={form.api_token} onChange={(event) => updateField("api_token", event.target.value)} />
-            </label>
-          ) : (
-            <label>
-              Personal Access Token (optional)
+          {activeAuthFields.map((field) => (
+            <label key={field.key}>
+              {field.label}
               <input
-                type="password"
+                type={field.sensitive ? "password" : "text"}
                 autoComplete="new-password"
-                value={form.personal_access_token}
-                onChange={(event) => updateField("personal_access_token", event.target.value)}
+                required={!field.optional}
+                value={form.credentials[field.key] || ""}
+                onChange={(event) => updateCredential(field.key, event.target.value)}
               />
             </label>
-          )}
+          ))}
 
           <label>
-            {toolType === "JIRA" ? "Default Project Key (optional)" : "Default Project Name"}
-            <input value={form.default_project} onChange={(event) => updateField("default_project", event.target.value)} />
+            Default Project / Workspace (optional)
+            <input
+              value={form.default_project}
+              onChange={(event) => setForm((current) => ({ ...current, default_project: event.target.value }))}
+            />
           </label>
 
           <label>
@@ -282,7 +311,7 @@ export default function IntegrationConfigurationPage() {
               type="password"
               autoComplete="new-password"
               value={form.webhook_secret}
-              onChange={(event) => updateField("webhook_secret", event.target.value)}
+              onChange={(event) => setForm((current) => ({ ...current, webhook_secret: event.target.value }))}
             />
           </label>
         </div>
@@ -306,6 +335,9 @@ export default function IntegrationConfigurationPage() {
             Current Status: <strong>{statusLabel}</strong>
           </p>
           <p>
+            Auth Type: <strong>{status.auth_type || "—"}</strong>
+          </p>
+          <p>
             Last Successful Sync: <strong>{status.last_successful_sync ? new Date(status.last_successful_sync).toLocaleString() : "—"}</strong>
           </p>
           <p>
@@ -326,13 +358,7 @@ export default function IntegrationConfigurationPage() {
       </section>
 
       <style jsx>{`
-        .config-shell {
-          min-height: 100vh;
-          background: #f8fafc;
-          color: #1f2937;
-          padding: 32px;
-          font-family: Inter, Segoe UI, Arial, sans-serif;
-        }
+        .config-shell { min-height: 100vh; background: #f8fafc; color: #1f2937; padding: 32px; font-family: Inter, Segoe UI, Arial, sans-serif; }
         .header h1 { margin: 0; color: #1e3a8a; font-size: 30px; }
         .tenant { color: #6b7280; margin: 8px 0; }
         .status-row { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -340,41 +366,17 @@ export default function IntegrationConfigurationPage() {
         .pill.connected { color: #166534; border-color: #bbf7d0; }
         .pill.disconnected { color: #991b1b; border-color: #fecaca; }
         .pill.token_expired { color: #92400e; border-color: #fde68a; }
-        .card {
-          margin-top: 16px;
-          background: #fff;
-          border: 1px solid #e5e7eb;
-          border-radius: 12px;
-          padding: 18px;
-          box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
-        }
+        .card { margin-top: 16px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05); }
         .card h2 { margin: 0 0 12px; font-size: 18px; }
         .warn-text { color: #92400e; margin: 0 0 10px; font-size: 14px; }
-        .radio-row { display: flex; gap: 16px; }
-        .radio-row label { display: inline-flex; gap: 8px; align-items: center; }
         .reset-check { margin-top: 12px; display: inline-flex; gap: 8px; color: #4b5563; }
         .grid { display: grid; gap: 12px; }
         .grid.two { grid-template-columns: 1fr 1fr; }
         label { display: grid; gap: 6px; font-size: 13px; color: #374151; }
-        input {
-          height: 42px;
-          border: 1px solid #d1d5db;
-          border-radius: 8px;
-          padding: 0 12px;
-          outline: none;
-        }
-        input:focus { border-color: #1e3a8a; box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.12); }
+        input, select { height: 42px; border: 1px solid #d1d5db; border-radius: 8px; padding: 0 12px; outline: none; background: #fff; }
+        input:focus, select:focus { border-color: #1e3a8a; box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.12); }
         .actions { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
-        .btn {
-          border: 0;
-          border-radius: 8px;
-          height: 40px;
-          padding: 0 14px;
-          font-weight: 600;
-          cursor: pointer;
-          background: #1e3a8a;
-          color: #fff;
-        }
+        .btn { border: 0; border-radius: 8px; height: 40px; padding: 0 14px; font-weight: 600; cursor: pointer; background: #1e3a8a; color: #fff; }
         .btn.secondary { background: #fff; color: #1f2937; border: 1px solid #d1d5db; }
         .btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .feedback { margin: 12px 0 0; font-size: 14px; }
@@ -382,10 +384,7 @@ export default function IntegrationConfigurationPage() {
         .feedback.error { color: #dc2626; }
         .feedback.warn { color: #92400e; }
         .health-grid p { margin: 0; color: #4b5563; }
-        @media (max-width: 900px) {
-          .config-shell { padding: 20px; }
-          .grid.two { grid-template-columns: 1fr; }
-        }
+        @media (max-width: 900px) { .config-shell { padding: 20px; } .grid.two { grid-template-columns: 1fr; } }
       `}</style>
     </main>
   );
