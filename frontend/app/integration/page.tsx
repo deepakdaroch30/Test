@@ -128,7 +128,7 @@ export default function IntegrationConfigurationPage() {
         auth_type: authType,
         base_url: form.base_url,
         credentials: form.credentials,
-        webhook_secret: form.webhook_secret,
+        webhook_secret: toolType === "JIRA" ? "" : form.webhook_secret,
       };
 
       const response = await fetch("/api/v1/integrations/test", {
@@ -162,7 +162,7 @@ export default function IntegrationConfigurationPage() {
         auth_type: authType,
         base_url: form.base_url,
         credentials: form.credentials,
-        webhook_secret: form.webhook_secret,
+        webhook_secret: toolType === "JIRA" ? "" : form.webhook_secret,
         default_project: form.default_project || null,
         reset_confirmed: form.reset_confirmed,
       };
@@ -176,7 +176,7 @@ export default function IntegrationConfigurationPage() {
       if (!response.ok) throw new Error(result.detail || "Unable to save configuration");
 
       setFeedback({ tone: "ok", text: result.message || "Integration configuration saved securely." });
-      setForm((current) => ({ ...current, webhook_secret: "", credentials: {} }));
+      setForm((current) => ({ ...current, credentials: {} }));
       await fetchStatus();
     } catch (error) {
       setFeedback({ tone: "error", text: error instanceof Error ? error.message : "Save failed" });
@@ -304,16 +304,18 @@ export default function IntegrationConfigurationPage() {
             />
           </label>
 
-          <label>
-            Webhook Secret
-            <input
-              required
-              type="password"
-              autoComplete="new-password"
-              value={form.webhook_secret}
-              onChange={(event) => setForm((current) => ({ ...current, webhook_secret: event.target.value }))}
-            />
-          </label>
+          {toolType !== "JIRA" && (
+            <label>
+              Webhook Secret
+              <input
+                required
+                type="password"
+                autoComplete="new-password"
+                value={form.webhook_secret}
+                onChange={(event) => setForm((current) => ({ ...current, webhook_secret: event.target.value }))}
+              />
+            </label>
+          )}
         </div>
 
         <div className="actions">

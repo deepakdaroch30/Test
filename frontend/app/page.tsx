@@ -414,6 +414,8 @@ export default function LoginPage() {
           color: #1f2937;
           transition: border-color 0.2s ease, box-shadow 0.2s ease;
           font-size: 14px;
+          box-sizing: border-box;
+          line-height: 1.25;
         }
 
         input:focus {
@@ -423,6 +425,8 @@ export default function LoginPage() {
 
         .password-wrap {
           position: relative;
+          display: flex;
+          align-items: center;
         }
 
         .password-wrap input {
