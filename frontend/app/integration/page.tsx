@@ -3,8 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import TopMenu from "../components/top-menu";
 
-type ToolType = "JIRA" | "AZURE_DEVOPS" | "QTEST" | "ZEPHYR" | "TESTRAIL";
-type AuthType = "BASIC" | "OAUTH2" | "PAT" | "TOKEN";
+type ToolType = "JIRA" | "AZURE_DEVOPS" | "QTEST" | "ZEPHYR" | "TESTRAIL" | "ZEPHYR_ESSENTIAL";
+type AuthType = "BASIC" | "OAUTH2" | "PAT" | "TOKEN" | "BEARER";
 type Status = "connected" | "disconnected" | "token_expired";
 
 type IntegrationStatus = {
@@ -27,6 +27,7 @@ const TOOL_AUTH_OPTIONS: Record<ToolType, AuthType[]> = {
   QTEST: ["TOKEN", "OAUTH2"],
   ZEPHYR: ["TOKEN", "BASIC"],
   TESTRAIL: ["BASIC", "TOKEN"],
+  ZEPHYR_ESSENTIAL: ["BEARER"],
 };
 
 const AUTH_FIELDS: Record<AuthType, FieldConfig[]> = {
@@ -41,6 +42,7 @@ const AUTH_FIELDS: Record<AuthType, FieldConfig[]> = {
   ],
   PAT: [{ key: "personal_access_token", label: "Personal Access Token", sensitive: true }],
   TOKEN: [{ key: "api_token", label: "API Token", sensitive: true }],
+  BEARER: [{ key: "bearer_token", label: "Bearer Token", sensitive: true }],
 };
 
 const TOOL_BASE_URL_LABEL: Record<ToolType, string> = {
@@ -49,6 +51,36 @@ const TOOL_BASE_URL_LABEL: Record<ToolType, string> = {
   QTEST: "qTest Base URL",
   ZEPHYR: "Zephyr Base URL",
   TESTRAIL: "TestRail Base URL",
+  ZEPHYR_ESSENTIAL: "Zephyr Base URL",
+};
+
+
+
+const AUTH_OPTION_LABELS: Record<AuthType, string> = {
+  BASIC: "BASIC",
+  OAUTH2: "OAUTH2",
+  PAT: "PAT",
+  TOKEN: "TOKEN",
+  BEARER: "Bearer Token",
+};
+
+const parseApiPayload = async <T,>(response: Response): Promise<T> => {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    return (await response.json()) as T;
+  }
+
+  const body = await response.text();
+  const trimmed = body.trim();
+
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    return JSON.parse(trimmed) as T;
+  }
+
+  throw new Error(
+    `Unexpected response from server (${response.status}). Verify backend API routing is configured and returning JSON.`,
+  );
 };
 
 const initialStatus: IntegrationStatus = {
@@ -77,6 +109,9 @@ export default function IntegrationConfigurationPage() {
     base_url: "",
     webhook_secret: "",
     default_project: "",
+    zephyr_base_url: "",
+    zephyr_access_key: "",
+    zephyr_default_project_key: "",
     reset_confirmed: false,
     credentials: {} as Record<string, string>,
   });
@@ -89,6 +124,16 @@ export default function IntegrationConfigurationPage() {
   );
 
   const activeAuthFields = AUTH_FIELDS[authType];
+  const isZephyrEssential = toolType === "ZEPHYR_ESSENTIAL";
+  const credentialsForPayload = isZephyrEssential
+    ? {
+        zephyr_access_key: form.zephyr_access_key,
+        default_project_key: form.zephyr_default_project_key,
+      }
+    : form.credentials;
+  const configTitle = isZephyrEssential
+    ? "Zephyr Configuration (BEARER)"
+    : `${toolType} Configuration (${authType})`;
 
   useEffect(() => {
     const nextAuth = TOOL_AUTH_OPTIONS[toolType][0];
@@ -107,7 +152,7 @@ export default function IntegrationConfigurationPage() {
   const fetchStatus = async () => {
     const response = await fetch(`/api/v1/integrations/status?tenant_id=${tenantId}`, { headers: commonHeaders });
     if (!response.ok) throw new Error("Unable to load integration status");
-    const payload = (await response.json()) as IntegrationStatus;
+    const payload = await parseApiPayload<IntegrationStatus>(response);
     setStatus(payload);
     if (payload.tool_type) setToolType(payload.tool_type);
     if (payload.auth_type) setAuthType(payload.auth_type);
@@ -126,9 +171,9 @@ export default function IntegrationConfigurationPage() {
         tenant_id: tenantId,
         tool_type: toolType,
         auth_type: authType,
-        base_url: form.base_url,
-        credentials: form.credentials,
-        webhook_secret: toolType === "JIRA" ? "" : form.webhook_secret,
+        base_url: isZephyrEssential ? form.zephyr_base_url : form.base_url,
+        credentials: credentialsForPayload,
+        webhook_secret: toolType === "JIRA" || isZephyrEssential ? "" : form.webhook_secret,
       };
 
       const response = await fetch("/api/v1/integrations/test", {
@@ -136,7 +181,7 @@ export default function IntegrationConfigurationPage() {
         headers: commonHeaders,
         body: JSON.stringify(payload),
       });
-      const result = (await response.json()) as { status?: string; message?: string; detail?: string };
+      const result = await parseApiPayload<{ status?: string; message?: string; detail?: string }>(response);
       if (!response.ok || result.status === "error") {
         throw new Error(result.detail || result.message || "Connection test failed");
       }
@@ -160,10 +205,10 @@ export default function IntegrationConfigurationPage() {
         tenant_id: tenantId,
         tool_type: toolType,
         auth_type: authType,
-        base_url: form.base_url,
-        credentials: form.credentials,
-        webhook_secret: toolType === "JIRA" ? "" : form.webhook_secret,
-        default_project: form.default_project || null,
+        base_url: isZephyrEssential ? form.zephyr_base_url : form.base_url,
+        credentials: credentialsForPayload,
+        webhook_secret: toolType === "JIRA" || isZephyrEssential ? "" : form.webhook_secret,
+        default_project: isZephyrEssential ? form.zephyr_default_project_key || null : form.default_project || null,
         reset_confirmed: form.reset_confirmed,
       };
 
@@ -172,11 +217,11 @@ export default function IntegrationConfigurationPage() {
         headers: commonHeaders,
         body: JSON.stringify(payload),
       });
-      const result = (await response.json()) as { message?: string; detail?: string };
+      const result = await parseApiPayload<{ message?: string; detail?: string }>(response);
       if (!response.ok) throw new Error(result.detail || "Unable to save configuration");
 
       setFeedback({ tone: "ok", text: result.message || "Integration configuration saved securely." });
-      setForm((current) => ({ ...current, credentials: {} }));
+      setForm((current) => ({ ...current, credentials: {}, zephyr_access_key: "" }));
       await fetchStatus();
     } catch (error) {
       setFeedback({ tone: "error", text: error instanceof Error ? error.message : "Save failed" });
@@ -193,7 +238,7 @@ export default function IntegrationConfigurationPage() {
         method: "POST",
         headers: commonHeaders,
       });
-      const result = (await response.json()) as { message?: string; detail?: string };
+      const result = await parseApiPayload<{ message?: string; detail?: string }>(response);
       if (!response.ok) throw new Error(result.detail || "Action failed");
       setFeedback({ tone: "ok", text: result.message || "Action completed" });
       await fetchStatus();
@@ -242,6 +287,7 @@ export default function IntegrationConfigurationPage() {
               <option value="QTEST">qTest</option>
               <option value="ZEPHYR">Zephyr</option>
               <option value="TESTRAIL">TestRail</option>
+              <option value="ZEPHYR_ESSENTIAL">Zephyr Essential</option>
             </select>
           </label>
 
@@ -250,7 +296,7 @@ export default function IntegrationConfigurationPage() {
             <select value={authType} onChange={(event) => setAuthType(event.target.value as AuthType)}>
               {TOOL_AUTH_OPTIONS[toolType].map((option) => (
                 <option key={option} value={option}>
-                  {option}
+                  {AUTH_OPTION_LABELS[option]}
                 </option>
               ))}
             </select>
@@ -270,51 +316,88 @@ export default function IntegrationConfigurationPage() {
       </section>
 
       <form className="card" onSubmit={onTestConnection}>
-        <h2>{toolType} Configuration ({authType})</h2>
+        <h2>{configTitle}</h2>
 
         <div className="grid two">
-          <label>
-            {TOOL_BASE_URL_LABEL[toolType]}
-            <input
-              required
-              placeholder="https://"
-              value={form.base_url}
-              onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))}
-            />
-          </label>
+          {isZephyrEssential ? (
+            <>
+              <label>
+                Zephyr Base URL
+                <input
+                  required
+                  placeholder="https://prod-api.zephyr4jiracloud.com/v2/"
+                  value={form.zephyr_base_url}
+                  onChange={(event) => setForm((current) => ({ ...current, zephyr_base_url: event.target.value }))}
+                />
+              </label>
 
-          {activeAuthFields.map((field) => (
-            <label key={field.key}>
-              {field.label}
-              <input
-                type={field.sensitive ? "password" : "text"}
-                autoComplete="new-password"
-                required={!field.optional}
-                value={form.credentials[field.key] || ""}
-                onChange={(event) => updateCredential(field.key, event.target.value)}
-              />
-            </label>
-          ))}
+              <label>
+                Zephyr Access Key
+                <input
+                  required
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.zephyr_access_key}
+                  onChange={(event) => setForm((current) => ({ ...current, zephyr_access_key: event.target.value }))}
+                />
+              </label>
 
-          <label>
-            Default Project / Workspace (optional)
-            <input
-              value={form.default_project}
-              onChange={(event) => setForm((current) => ({ ...current, default_project: event.target.value }))}
-            />
-          </label>
+              <label>
+                Default Project Key
+                <input
+                  required
+                  placeholder="e.g., KAN"
+                  value={form.zephyr_default_project_key}
+                  onChange={(event) => setForm((current) => ({ ...current, zephyr_default_project_key: event.target.value }))}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label>
+                {TOOL_BASE_URL_LABEL[toolType]}
+                <input
+                  required
+                  placeholder="https://"
+                  value={form.base_url}
+                  onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))}
+                />
+              </label>
 
-          {toolType !== "JIRA" && (
-            <label>
-              Webhook Secret
-              <input
-                required
-                type="password"
-                autoComplete="new-password"
-                value={form.webhook_secret}
-                onChange={(event) => setForm((current) => ({ ...current, webhook_secret: event.target.value }))}
-              />
-            </label>
+              {activeAuthFields.map((field) => (
+                <label key={field.key}>
+                  {field.label}
+                  <input
+                    type={field.sensitive ? "password" : "text"}
+                    autoComplete="new-password"
+                    required={!field.optional}
+                    value={form.credentials[field.key] || ""}
+                    onChange={(event) => updateCredential(field.key, event.target.value)}
+                  />
+                </label>
+              ))}
+
+              <label>
+                Default Project / Workspace (optional)
+                <input
+                  value={form.default_project}
+                  onChange={(event) => setForm((current) => ({ ...current, default_project: event.target.value }))}
+                />
+              </label>
+
+              {toolType !== "JIRA" && (
+                <label>
+                  Webhook Secret
+                  <input
+                    required
+                    type="password"
+                    autoComplete="new-password"
+                    value={form.webhook_secret}
+                    onChange={(event) => setForm((current) => ({ ...current, webhook_secret: event.target.value }))}
+                  />
+                </label>
+              )}
+            </>
           )}
         </div>
 

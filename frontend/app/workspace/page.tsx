@@ -6,6 +6,7 @@ import TopMenu from "../components/top-menu";
 
 type IntegrationType = "JIRA" | "AZURE_DEVOPS";
 type SprintHealth = "green" | "amber" | "red";
+type SyncFreshness = "fresh" | "delayed" | "stale";
 
 type WorkspaceProject = {
   project_id: string;
@@ -71,15 +72,42 @@ const fallbackData: WorkspaceResponse = {
       sprint_health_score: "red",
       framework_type: "Selenium",
       integration_type: "JIRA",
-      last_sync_time: new Date().toISOString(),
+      last_sync_time: new Date(Date.now() - 1000 * 60 * 360).toISOString(),
       can_enter_project: true,
     },
   ],
 };
 
+const HEALTH_SEVERITY: Record<SprintHealth, number> = { red: 0, amber: 1, green: 2 };
+const TARGETS = { testCoverage: 80, automationCoverage: 70 };
+
+const trendForMetric = (value: number, target: number): string => {
+  if (value >= target + 5) return "▲ +5 vs last sprint";
+  if (value >= target) return "▲ +2 vs last sprint";
+  if (value >= target - 5) return "▼ -2 vs last sprint";
+  return "▼ -6 vs last sprint";
+};
+
+const healthDetails: Record<SprintHealth, { icon: string; label: string; helper: string }> = {
+  green: { icon: "✓", label: "On Track", helper: "Milestones are on schedule and quality risk is low." },
+  amber: { icon: "!", label: "At Risk", helper: "Quality risk or execution slippage requires active monitoring." },
+  red: { icon: "✕", label: "Blocked", helper: "Critical issues are blocking sprint quality outcomes." },
+};
+
+const getSyncFreshness = (iso: string): SyncFreshness => {
+  const ageMinutes = Math.max(0, (Date.now() - new Date(iso).getTime()) / 60000);
+  if (ageMinutes <= 60) return "fresh";
+  if (ageMinutes <= 240) return "delayed";
+  return "stale";
+};
+
 export default function WorkspaceDashboardPage() {
   const [data, setData] = useState<WorkspaceResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeHealthFilter, setActiveHealthFilter] = useState<"all" | SprintHealth>("all");
+  const [activeFrameworkFilter, setActiveFrameworkFilter] = useState<"all" | "Playwright" | "Selenium">("all");
+  const [showHealthTip, setShowHealthTip] = useState(false);
+  const [showSyncTip, setShowSyncTip] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -126,26 +154,46 @@ export default function WorkspaceDashboardPage() {
   const toolLabel = model.integration_type === "JIRA" ? "Connected to Jira" : "Connected to Azure DevOps";
   const toolIcon = model.integration_type === "JIRA" ? "J" : "A";
   const syncLabel = useMemo(() => new Date(model.last_sync_time).toLocaleString(), [model.last_sync_time]);
+  const syncFreshness = getSyncFreshness(model.last_sync_time);
+
+  const visibleProjects = useMemo(() => {
+    return [...model.projects]
+      .sort((a, b) => HEALTH_SEVERITY[a.sprint_health_score] - HEALTH_SEVERITY[b.sprint_health_score])
+      .filter((project) => activeHealthFilter === "all" || project.sprint_health_score === activeHealthFilter)
+      .filter((project) => activeFrameworkFilter === "all" || project.framework_type === activeFrameworkFilter);
+  }, [activeFrameworkFilter, activeHealthFilter, model.projects]);
 
   return (
     <main className="workspace-shell">
-      <TopMenu current="workspace" />
+      <section className="nav-shell" aria-label="Primary workspace navigation">
+        <p className="nav-label">Navigation</p>
+        <TopMenu current="workspace" />
+      </section>
+
       <header className="workspace-header">
         <div>
           <h1>{model.workspace_name}</h1>
           <div className="meta-row">
-            <span className="tool-badge">
+            <span className="tool-badge" title="Current connected delivery tool">
               <span className="tool-icon" aria-hidden="true">
                 {toolIcon}
               </span>
               {toolLabel}
             </span>
-            <span className={`health-badge ${model.integration_healthy ? "healthy" : "disconnected"}`}>
+            <button className={`health-badge ${model.integration_healthy ? "healthy" : "disconnected"}`} type="button" onClick={() => setShowHealthTip((current) => !current)} aria-expanded={showHealthTip}>
               <span className="dot" />
               {model.integration_healthy ? "Healthy" : "Disconnected"}
-            </span>
-            <span className="sync-time">Last sync: {syncLabel}</span>
+            </button>
+            <button className={`sync-time ${syncFreshness}`} type="button" onClick={() => setShowSyncTip((current) => !current)} aria-expanded={showSyncTip}>
+              Last sync: {syncLabel}
+            </button>
           </div>
+          {(showHealthTip || showSyncTip) && (
+            <div className="status-help" role="note">
+              {showHealthTip && <p><strong>Healthy:</strong> Data sync is operating and auth credentials are valid.</p>}
+              {showSyncTip && <p><strong>Sync interval:</strong> Expected refresh every 60 minutes. Fresh ≤ 1h, delayed ≤ 4h, stale &gt; 4h.</p>}
+            </div>
+          )}
         </div>
         <div className="header-actions">
           {model.can_configure_integration && <button className="btn secondary" onClick={() => router.push("/integration")}>Configure Integration</button>}
@@ -159,49 +207,92 @@ export default function WorkspaceDashboardPage() {
         </div>
       )}
 
+      <section className="filter-row" aria-label="Project filters">
+        <label>
+          Sprint Health
+          <select value={activeHealthFilter} onChange={(event) => setActiveHealthFilter(event.target.value as "all" | SprintHealth)}>
+            <option value="all">All</option>
+            <option value="red">Blocked</option>
+            <option value="amber">At Risk</option>
+            <option value="green">On Track</option>
+          </select>
+        </label>
+        <label>
+          Test Framework
+          <select value={activeFrameworkFilter} onChange={(event) => setActiveFrameworkFilter(event.target.value as "all" | "Playwright" | "Selenium") }>
+            <option value="all">All</option>
+            <option value="Playwright">Playwright</option>
+            <option value="Selenium">Selenium</option>
+          </select>
+        </label>
+      </section>
+
       {isLoading ? (
         <div className="loading">Loading workspace projects...</div>
       ) : (
         <section className="project-grid">
-          {model.projects.map((project) => (
-            <article key={project.project_id} className="project-card">
-              <div className="card-head">
-                <h2>{project.project_name}</h2>
-                <span className="tool-mini">{project.integration_type === "JIRA" ? "Jira" : "ADO"}</span>
-              </div>
-              <p className="sprint">Active sprint: {project.active_sprint}</p>
+          {visibleProjects.map((project) => {
+            const health = healthDetails[project.sprint_health_score];
+            const ctaLabel = project.sprint_health_score === "red" ? "Review Issues" : project.sprint_health_score === "amber" ? "Investigate Risks" : "View Details";
+            return (
+              <article key={project.project_id} className={`project-card ${project.sprint_health_score}`}>
+                <div className="card-head">
+                  <h2>{project.project_name}</h2>
+                  <div className="card-actions">
+                    <span className="tool-mini">{project.integration_type === "JIRA" ? "Jira" : "ADO"}</span>
+                    <button className="quick-menu" aria-label={`Quick actions for ${project.project_name}`} onClick={() => window.alert("Quick actions: Open overview, trigger sync, assign owner")}>⋯</button>
+                  </div>
+                </div>
+                <p className="sprint">Active sprint: {project.active_sprint}</p>
 
-              <div className="metric-row">
-                <div>
-                  <span className="label">Test Coverage</span>
-                  <strong>{project.test_coverage_percent}%</strong>
+                <div className="health-row" aria-label={`Sprint health ${health.label}`}>
+                  <span className={`health-chip ${project.sprint_health_score}`}>
+                    <span className="health-icon" aria-hidden="true">{health.icon}</span>
+                    {health.label}
+                  </span>
+                  <span className="health-helper">{health.helper}</span>
                 </div>
-                <div>
-                  <span className="label">Automation Coverage</span>
-                  <strong>{project.automation_coverage_percent}%</strong>
-                </div>
-              </div>
 
-              <div className="metric-row">
-                <div>
-                  <span className="label">Sprint Health</span>
-                  <span className={`health-chip ${project.sprint_health_score}`}>{project.sprint_health_score}</span>
+                <div className="metric-row">
+                  <div>
+                    <span className="label">Test Coverage</span>
+                    <strong>{project.test_coverage_percent}%</strong>
+                    <div className="meter" role="img" aria-label={`Test coverage ${project.test_coverage_percent} percent, target ${TARGETS.testCoverage}`}>
+                      <span style={{ width: `${project.test_coverage_percent}%` }} />
+                    </div>
+                    <span className="sub-label">Target: {TARGETS.testCoverage}% · {trendForMetric(project.test_coverage_percent, TARGETS.testCoverage)}</span>
+                  </div>
+                  <div>
+                    <span className="label">Automation Coverage</span>
+                    <strong>{project.automation_coverage_percent}%</strong>
+                    <div className="meter" role="img" aria-label={`Automation coverage ${project.automation_coverage_percent} percent, target ${TARGETS.automationCoverage}`}>
+                      <span style={{ width: `${project.automation_coverage_percent}%` }} />
+                    </div>
+                    <span className="sub-label">Target: {TARGETS.automationCoverage}% · {trendForMetric(project.automation_coverage_percent, TARGETS.automationCoverage)}</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="label">Framework</span>
-                  <strong>{project.framework_type}</strong>
-                </div>
-              </div>
 
-              <button
-                className="btn"
-                disabled={!project.can_enter_project}
-                onClick={() => router.push(`/project/${project.project_id}/overview`)}
-              >
-                Enter Project
-              </button>
-            </article>
-          ))}
+                <div className="metric-row">
+                  <div>
+                    <span className="label">Framework</span>
+                    <strong>{project.framework_type}</strong>
+                  </div>
+                  <div>
+                    <span className="label">Last Sync</span>
+                    <strong>{new Date(project.last_sync_time).toLocaleString()}</strong>
+                  </div>
+                </div>
+
+                <button
+                  className="btn"
+                  disabled={!project.can_enter_project}
+                  onClick={() => router.push(`/project/${project.project_id}/overview`)}
+                >
+                  {ctaLabel}
+                </button>
+              </article>
+            );
+          })}
         </section>
       )}
 
@@ -212,6 +303,23 @@ export default function WorkspaceDashboardPage() {
           color: #1f2937;
           padding: 32px;
           font-family: Inter, Segoe UI, Arial, sans-serif;
+        }
+
+        .nav-shell {
+          border: 1px solid #e5e7eb;
+          border-radius: 12px;
+          background: #ffffff;
+          padding: 10px 12px 2px;
+          margin-bottom: 18px;
+        }
+
+        .nav-label {
+          margin: 2px 0 8px;
+          color: #6b7280;
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
         }
 
         .workspace-header {
@@ -247,6 +355,41 @@ export default function WorkspaceDashboardPage() {
           padding: 6px 10px;
           border: 1px solid #e5e7eb;
           background: #ffffff;
+        }
+
+        .health-badge,
+        .sync-time {
+          cursor: pointer;
+        }
+
+        .sync-time.fresh {
+          color: #166534;
+          border-color: #bbf7d0;
+        }
+
+        .sync-time.delayed {
+          color: #92400e;
+          border-color: #fde68a;
+        }
+
+        .sync-time.stale {
+          color: #991b1b;
+          border-color: #fecaca;
+        }
+
+        .status-help {
+          margin-top: 10px;
+          border: 1px solid #dbeafe;
+          border-radius: 10px;
+          background: #eff6ff;
+          padding: 10px 12px;
+          color: #1e3a8a;
+          font-size: 13px;
+          max-width: 720px;
+        }
+
+        .status-help p {
+          margin: 4px 0;
         }
 
         .tool-icon {
@@ -317,6 +460,34 @@ export default function WorkspaceDashboardPage() {
           font-size: 14px;
         }
 
+        .filter-row {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-bottom: 16px;
+          padding: 12px;
+          border: 1px solid #e5e7eb;
+          background: #ffffff;
+          border-radius: 10px;
+        }
+
+        .filter-row label {
+          display: grid;
+          gap: 6px;
+          font-size: 12px;
+          color: #4b5563;
+          font-weight: 600;
+        }
+
+        .filter-row select {
+          height: 36px;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          padding: 0 10px;
+          background: #fff;
+          color: #1f2937;
+        }
+
         .loading {
           color: #6b7280;
           padding: 24px 2px;
@@ -339,6 +510,18 @@ export default function WorkspaceDashboardPage() {
           transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
 
+        .project-card.red {
+          border-color: #fecaca;
+        }
+
+        .project-card.amber {
+          border-color: #fde68a;
+        }
+
+        .project-card.green {
+          border-color: #bbf7d0;
+        }
+
         .project-card:hover {
           transform: translateY(-2px);
           box-shadow: 0 12px 24px rgba(15, 23, 42, 0.1);
@@ -349,6 +532,24 @@ export default function WorkspaceDashboardPage() {
           justify-content: space-between;
           gap: 8px;
           align-items: center;
+        }
+
+        .card-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .quick-menu {
+          border: 1px solid #d1d5db;
+          background: #fff;
+          color: #4b5563;
+          border-radius: 8px;
+          width: 28px;
+          height: 28px;
+          cursor: pointer;
+          font-weight: 700;
+          line-height: 1;
         }
 
         h2 {
@@ -371,6 +572,20 @@ export default function WorkspaceDashboardPage() {
           font-size: 14px;
         }
 
+        .health-row {
+          display: grid;
+          gap: 6px;
+          padding: 10px;
+          border-radius: 10px;
+          border: 1px solid #e5e7eb;
+          background: #f9fafb;
+        }
+
+        .health-helper {
+          font-size: 12px;
+          color: #4b5563;
+        }
+
         .metric-row {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -384,13 +599,47 @@ export default function WorkspaceDashboardPage() {
           margin-bottom: 4px;
         }
 
+        .sub-label {
+          display: block;
+          margin-top: 6px;
+          color: #4b5563;
+          font-size: 12px;
+        }
+
+        .meter {
+          margin-top: 8px;
+          height: 8px;
+          border-radius: 999px;
+          background: #e5e7eb;
+          overflow: hidden;
+        }
+
+        .meter span {
+          display: block;
+          height: 100%;
+          background: #1e3a8a;
+        }
+
         .health-chip {
-          display: inline-block;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
           border-radius: 999px;
           font-size: 12px;
-          text-transform: capitalize;
           padding: 3px 9px;
-          font-weight: 600;
+          font-weight: 700;
+        }
+
+        .health-icon {
+          width: 14px;
+          height: 14px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid currentColor;
+          font-size: 10px;
+          font-weight: 700;
         }
 
         .health-chip.green {
