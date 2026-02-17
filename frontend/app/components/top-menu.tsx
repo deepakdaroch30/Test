@@ -17,16 +17,16 @@ export default function TopMenu({ current }: Props) {
   return (
     <nav className="top-menu" aria-label="Primary navigation">
       <div className="menu-links">
-        <Link href="/workspace" className={current === "workspace" ? "active" : ""}>
+        <Link href="/workspace" className={`menu-link ${current === "workspace" ? "active" : ""}`}>
           Workspace
         </Link>
-        <Link href="/integration" className={current === "integration" ? "active" : ""}>
+        <Link href="/integration" className={`menu-link ${current === "integration" ? "active" : ""}`}>
           Integration Configuration
         </Link>
-        <Link href="/project/tenant-acme-JIRA-101/overview" className={current === "project" ? "active" : ""}>
+        <Link href="/project/tenant-acme-JIRA-101/overview" className={`menu-link ${current === "project" ? "active" : ""}`}>
           Project Overview
         </Link>
-        <Link href="/requirements" className={current === "requirements" ? "active" : ""}>
+        <Link href="/requirements" className={`menu-link ${current === "requirements" ? "active" : ""}`}>
           Requirements Intake
         </Link>
       </div>
@@ -55,19 +55,21 @@ export default function TopMenu({ current }: Props) {
           flex-wrap: wrap;
         }
 
-        a {
+        .menu-link {
           text-decoration: none;
           color: #334155;
           font-size: 13px;
           font-weight: 600;
           border-radius: 8px;
           padding: 8px 12px;
+          display: inline-flex;
+          align-items: center;
         }
-        a:hover {
+        .menu-link:hover {
           background: #eef2ff;
           color: #1e3a8a;
         }
-        .active {
+        .menu-link.active {
           background: #1e3a8a;
           color: #ffffff;
         }
