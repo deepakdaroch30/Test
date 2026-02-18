@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import TechMountLogo from "./components/techmount-logo";
 
 type SsoProvider = "jira" | "azure" | null;
 
@@ -69,7 +70,15 @@ export default function LoginPage() {
         <div className="shape shape-c" />
 
         <div className="brand-content">
-          <div className="logo">QAO</div>
+          <div className="logo-lockup">
+            <span className="logo">
+              <TechMountLogo size={38} />
+            </span>
+            <div>
+              <p className="brand-tag">TechMount</p>
+              <p className="brand-caption">AI Quality Platform</p>
+            </div>
+          </div>
           <h1>AI-Powered QA Orchestration Platform</h1>
           <p>Intelligent Quality. Automated Governance.</p>
         </div>
@@ -224,18 +233,35 @@ export default function LoginPage() {
           max-width: 420px;
         }
 
+        .logo-lockup {
+          display: inline-flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 24px;
+        }
+
         .logo {
-          width: 44px;
-          height: 44px;
-          border-radius: 10px;
+          width: 48px;
+          height: 48px;
+          border-radius: 12px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           background: rgba(255, 255, 255, 0.2);
-          font-size: 14px;
+          padding: 5px;
+        }
+
+        .brand-tag {
+          margin: 0;
+          font-size: 18px;
           font-weight: 700;
-          letter-spacing: 0.08em;
-          margin-bottom: 24px;
+          line-height: 1;
+        }
+
+        .brand-caption {
+          margin: 6px 0 0;
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.85);
         }
 
         .brand-content h1 {

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import TechMountLogo from "./techmount-logo";
 
 type Props = {
   current: "workspace" | "integration" | "project" | "requirements";
@@ -16,6 +17,14 @@ export default function TopMenu({ current }: Props) {
 
   return (
     <nav className="top-menu" aria-label="Primary navigation">
+      <div className="brand-block" aria-label="Application brand">
+        <TechMountLogo size={26} />
+        <div>
+          <p className="brand-name">TechMount</p>
+          <p className="brand-subtitle">AI Quality Hub</p>
+        </div>
+      </div>
+
       <div className="menu-links">
         <Link href="/workspace" className={`menu-link ${current === "workspace" ? "active" : ""}`}>
           Workspace
@@ -39,14 +48,36 @@ export default function TopMenu({ current }: Props) {
         .top-menu {
           background: #ffffff;
           border: 1px solid #e5e7eb;
-          border-radius: 10px;
+          border-radius: 12px;
           padding: 8px 10px;
-          display: flex;
+          display: grid;
+          grid-template-columns: auto 1fr auto;
           align-items: center;
-          justify-content: space-between;
           gap: 16px;
           box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
           margin-bottom: 14px;
+        }
+
+        .brand-block {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 168px;
+        }
+
+        .brand-name {
+          margin: 0;
+          font-weight: 700;
+          color: #183f73;
+          font-size: 14px;
+          line-height: 1;
+        }
+
+        .brand-subtitle {
+          margin: 3px 0 0;
+          color: #64748b;
+          font-size: 11px;
+          line-height: 1;
         }
 
         .menu-links {
@@ -88,6 +119,16 @@ export default function TopMenu({ current }: Props) {
 
         .logout-btn:hover {
           background: #f8fafc;
+        }
+
+        @media (max-width: 980px) {
+          .top-menu {
+            grid-template-columns: 1fr;
+          }
+
+          .brand-block {
+            min-width: 0;
+          }
         }
       `}</style>
     </nav>
