@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import TechMountLogo from "./techmount-logo";
 
 type Props = {
   current: "workspace" | "integration" | "project" | "requirements";
@@ -17,6 +18,7 @@ export default function TopMenu({ current }: Props) {
   return (
     <nav className="top-menu" aria-label="Primary navigation">
       <div className="brand-block" aria-label="Application brand">
+        <TechMountLogo size={26} />
         <div>
           <p className="brand-name">TechMount</p>
           <p className="brand-subtitle">AI Quality Hub</p>
