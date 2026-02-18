@@ -4,12 +4,16 @@ import base64
 import hashlib
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.database import get_db
+from app.models.tenant_integration import TenantIntegration
 from app.schemas.integration_config import (
-    AuthType,
     IntegrationActionResponse,
     IntegrationSaveRequest,
     IntegrationState,
@@ -151,8 +155,38 @@ def save_integration(
 def get_integration_status(
     tenant_id: str,
     x_user_role: str = Header(default="qa_engineer"),
+    db: Session = Depends(get_db),
 ) -> IntegrationStatusResponse:
     _require_admin(x_user_role)
+
+    db_integration = None
+    try:
+        tenant_uuid = UUID(tenant_id)
+    except ValueError:
+        tenant_uuid = None
+
+    if tenant_uuid is not None:
+        db_integration = db.execute(
+            select(TenantIntegration).where(
+                TenantIntegration.tenant_id == tenant_uuid,
+                TenantIntegration.tool_type == "ZEPHYR",
+            )
+        ).scalar_one_or_none()
+
+    if db_integration is not None:
+        connected = db_integration.integration_status == "CONNECTED"
+        return IntegrationStatusResponse(
+            tenant_id=tenant_id,
+            tool_type="ZEPHYR",
+            auth_type="BEARER",
+            integration_status=IntegrationState.connected if connected else IntegrationState.disconnected,
+            last_successful_sync=None,
+            last_tested_timestamp=db_integration.last_tested_at.isoformat() if db_integration.last_tested_at else None,
+            last_error_message=None if connected else "Zephyr integration test failed",
+            connected=connected,
+            configuration_locked=True,
+        )
+
     stored = TENANT_INTEGRATIONS.get(tenant_id)
     if not stored:
         return IntegrationStatusResponse(

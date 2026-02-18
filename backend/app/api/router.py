@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import ai, auth, dashboard, dod, integrations, project_overview, projects, rtm, stories, testcases, workspace, zephyr_integration
+from app.api.routes import ai, auth, dashboard, dod, integrations, integrations_zephyr, project_overview, projects, rtm, stories, testcases, workspace
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -15,4 +15,4 @@ api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboar
 api_router.include_router(workspace.router, prefix="/workspace", tags=["workspace"])
 api_router.include_router(project_overview.router, prefix="/project", tags=["project-overview"])
 
-api_router.include_router(zephyr_integration.router, prefix="/integration/zephyr", tags=["zephyr-integration"])
+api_router.include_router(integrations_zephyr.router, prefix="/integrations/zephyr", tags=["integrations-zephyr"])

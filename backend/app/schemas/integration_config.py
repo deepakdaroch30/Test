@@ -13,6 +13,7 @@ class ToolType(str, Enum):
 
 class AuthType(str, Enum):
     basic = "BASIC"
+    bearer = "BEARER"
     oauth1 = "OAUTH1"
     oauth2 = "OAUTH2"
     cookie = "COOKIE"
