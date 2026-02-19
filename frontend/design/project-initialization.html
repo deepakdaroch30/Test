@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset='utf-8'/><meta name='viewport' content='width=device-width, initial-scale=1'/><title>Project Initialization</title><link rel='stylesheet' href='styles.css'></head><body><div class='layout'>
+<aside class='sidebar'><h3 class='brand'>QA Orchestrator</h3><nav class='nav'><a href='index.html'>Preview Hub</a><a class='active' href='project-initialization.html'>Project Initialization</a><a href='sprint-ingestion.html'>Sprint Ingestion</a><a href='requirement-analyzer.html'>Requirement Analyzer</a><a href='test-case-generation.html'>Test Case Generation</a><a href='automation-workbench.html'>Automation Workbench</a><a href='rtm-dod.html'>RTM + DoD</a><a href='quality-dashboard.html'>Quality Dashboard</a><a href='admin-settings.html'>Admin Settings</a></nav></aside>
+<main class='content'><div class='header'><div><h1 class='h1'>Project Initialization</h1><div class='sub'>One-time immutable project setup.</div></div><span class='pill'>Locked After Save</span></div>
+<div class='grid cols-2'><section class='card stack'>
+<div class='field'><label>Project name</label><input value='Payments QA Modernization'></div>
+<div class='field'><label>Jira Project Key</label><input value='QA'></div>
+<div class='field'><label>Test Case Format</label><select><option>Structured format</option><option>Gherkin (BDD)</option></select></div>
+<div class='field'><label>Automation Framework</label><select><option>Playwright (recommended)</option><option>Selenium</option></select></div>
+<div class='field'><label>Programming Language</label><select><option>TypeScript / JavaScript</option><option>Python</option><option>Java</option></select></div>
+</section>
+<section class='card stack'>
+<div class='field'><label>GitHub repository mapping</label><input value='org/qa-orchestrator'></div>
+<div class='field'><label>Branching strategy</label><select><option>Trunk + feature branches</option><option>Gitflow</option></select></div>
+<div class='field'><label>Immutable config policy</label><textarea rows='5'>After first save, framework/format/language are locked to preserve sprint consistency and RTM compatibility.</textarea></div>
+<div style='display:flex;gap:8px;justify-content:flex-end'><button class='btn secondary'>Validate</button><button class='btn'>Save & Lock Configuration</button></div>
+</section></div></main></div></body></html>
