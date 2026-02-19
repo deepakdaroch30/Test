@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import requests
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.token_crypto import encrypt_token
 from app.models.tenant_integration import TenantIntegration
+from app.services.zephyr_service import get_test_cycles, get_zephyr_integration
 
 router = APIRouter()
 
@@ -105,3 +106,31 @@ def save_zephyr_integration(
 
     except Exception as exc:
         return {"success": False, "error": str(exc)}
+
+
+@router.get("/testcycles")
+def get_zephyr_testcycles(
+    tenant_id: str,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    try:
+        if not tenant_id.strip():
+            return {"success": False, "error": "tenant_id is required."}
+
+        integration_result = get_zephyr_integration(db, tenant_id)
+        if not integration_result.get("success"):
+            raise HTTPException(status_code=404, detail="Zephyr integration not configured.")
+
+        data = integration_result.get("data")
+        if not isinstance(data, dict):
+            return {"success": False, "error": "Invalid Zephyr integration state."}
+
+        test_cycles_result = get_test_cycles(str(data.get("base_url", "")), str(data.get("api_token", "")))
+        if not test_cycles_result.get("success"):
+            return {"success": False, "error": str(test_cycles_result.get("error", "Unable to load Zephyr test cycles."))}
+
+        return {"success": True, "data": test_cycles_result.get("data")}
+    except HTTPException as exc:
+        return {"success": False, "error": str(exc.detail)}
+    except Exception:
+        return {"success": False, "error": "Unexpected error while loading Zephyr test cycles."}
