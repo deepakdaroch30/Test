@@ -64,8 +64,9 @@ const parseApiPayload = async <T,>(response: Response): Promise<T> => {
     return JSON.parse(trimmed) as T;
   }
 
+  const snippet = trimmed.slice(0, 120);
   throw new Error(
-    `Unexpected response from server (${response.status}). Verify backend API routing is configured and returning JSON.`,
+    `Unexpected response from server (${response.status}). Verify backend API routing is configured and returning JSON.${snippet ? ` Response snippet: ${snippet}` : ""}`,
   );
 };
 
@@ -91,6 +92,10 @@ export default function IntegrationConfigurationPage() {
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRunningAction, setIsRunningAction] = useState(false);
+  const [proxyHealth, setProxyHealth] = useState<{ state: "checking" | "ok" | "error"; message: string }>({
+    state: "checking",
+    message: "Checking API proxy...",
+  });
   const [form, setForm] = useState({
     base_url: "",
     webhook_secret: "",
@@ -105,10 +110,7 @@ export default function IntegrationConfigurationPage() {
   const lockedToDifferentTool = status.configuration_locked && status.tool_type && status.tool_type !== toolType;
   const isZephyr = toolType === "ZEPHYR";
 
-  const commonHeaders = useMemo(
-    () => ({ "Content-Type": "application/json", "x-user-role": "admin" }),
-    [],
-  );
+  const commonHeaders = useMemo(() => ({ "Content-Type": "application/json" }), []);
 
   const activeAuthFields = AUTH_FIELDS[authType];
 
@@ -127,16 +129,30 @@ export default function IntegrationConfigurationPage() {
   };
 
   const fetchStatus = async () => {
-    const response = await fetch(`/api/v1/integrations/status?tenant_id=${tenantId}`, { headers: commonHeaders });
-    if (!response.ok) throw new Error("Unable to load integration status");
-    const payload = await parseApiPayload<IntegrationStatus>(response);
-    setStatus(payload);
-    if (payload.tool_type) setToolType(payload.tool_type);
-    if (payload.auth_type) setAuthType(payload.auth_type);
+    setProxyHealth({ state: "checking", message: "Checking API proxy..." });
+    try {
+      const response = await fetch(`/api/v1/integrations/status?tenant_id=${tenantId}`, { headers: commonHeaders });
+      if (!response.ok) {
+        setProxyHealth({ state: "error", message: `Proxy check failed (${response.status}).` });
+        throw new Error("Unable to load integration status");
+      }
+
+      const payload = await parseApiPayload<IntegrationStatus>(response);
+      setStatus(payload);
+      if (payload.tool_type) setToolType(payload.tool_type);
+      if (payload.auth_type) setAuthType(payload.auth_type);
+      setProxyHealth({ state: "ok", message: "API proxy reachable." });
+    } catch (error) {
+      setProxyHealth({
+        state: "error",
+        message: error instanceof Error ? error.message : "Proxy check failed.",
+      });
+      throw error;
+    }
   };
 
   useEffect(() => {
-    void fetchStatus();
+    void fetchStatus().catch(() => null);
   }, []);
 
   const onTestConnection = async (event: FormEvent) => {
@@ -146,19 +162,32 @@ export default function IntegrationConfigurationPage() {
 
     try {
       if (isZephyr) {
+        const payload = {
+          tenant_id: tenantId,
+          base_url: form.zephyr_base_url,
+          api_token: form.zephyr_api_token,
+        };
+
         const response = await fetch("/api/v1/integrations/zephyr/test", {
           method: "POST",
-          headers: commonHeaders,
-          body: JSON.stringify({
-            tenant_id: tenantId,
-            base_url: form.zephyr_base_url,
-            api_token: form.zephyr_api_token,
-          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
         });
-        const result = await parseApiPayload<{ success?: boolean; error?: string }>(response);
 
-        if (!response.ok || !result.success) {
-          throw new Error(result.error || "Zephyr connection test failed");
+        const result = await parseApiPayload<{ success?: boolean; error?: string; detail?: string }>(response);
+
+        if (!response.ok) {
+          throw new Error(
+            result.error ||
+              result.detail ||
+              "Zephyr test failed via proxy. Verify BACKEND_ORIGIN and backend availability.",
+          );
+        }
+
+        if (!result.success) {
+          throw new Error(result.error || result.detail || "Zephyr connection test failed");
         }
 
         setConnectionTestPassed(true);
@@ -203,19 +232,33 @@ export default function IntegrationConfigurationPage() {
 
     try {
       if (isZephyr) {
+        const payload = {
+          tenant_id: tenantId,
+          base_url: form.zephyr_base_url,
+          api_token: form.zephyr_api_token,
+          project_key: form.zephyr_project_key,
+        };
+
         const response = await fetch("/api/v1/integrations/zephyr/save", {
           method: "POST",
-          headers: commonHeaders,
-          body: JSON.stringify({
-            tenant_id: tenantId,
-            base_url: form.zephyr_base_url,
-            api_token: form.zephyr_api_token,
-            project_key: form.zephyr_project_key,
-          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
         });
-        const result = await parseApiPayload<{ success?: boolean; message?: string; detail?: string }>(response);
-        if (!response.ok || !result.success) {
-          throw new Error(result.detail || result.message || "Unable to save Zephyr configuration");
+
+        const result = await parseApiPayload<{ success?: boolean; message?: string; error?: string; detail?: string }>(response);
+
+        if (!response.ok) {
+          throw new Error(
+            result.error ||
+              result.detail ||
+              "Zephyr save failed via proxy. Verify BACKEND_ORIGIN and backend availability.",
+          );
+        }
+
+        if (!result.success) {
+          throw new Error(result.error || result.detail || result.message || "Unable to save Zephyr configuration");
         }
 
         setFeedback({ tone: "ok", text: "Zephyr configuration saved." });
@@ -289,6 +332,10 @@ export default function IntegrationConfigurationPage() {
           <div className="status-row">
             <span className={`pill ${status.integration_status}`}>{statusLabel}</span>
             <span className="pill">Last Sync: {status.last_successful_sync ? new Date(status.last_successful_sync).toLocaleString() : "—"}</span>
+          </div>
+          <div className={`proxy-health ${proxyHealth.state}`} role="status" aria-live="polite">
+            <span className={`dot ${proxyHealth.state}`} aria-hidden="true" />
+            <span>Proxy Health: {proxyHealth.message}</span>
           </div>
         </div>
       </header>
@@ -458,6 +505,12 @@ export default function IntegrationConfigurationPage() {
         .header h1 { margin: 0; color: #1e3a8a; font-size: 30px; }
         .tenant { color: #6b7280; margin: 8px 0; }
         .status-row { display: flex; flex-wrap: wrap; gap: 8px; }
+        .proxy-health { margin-top: 10px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 10px; border-radius: 999px; border: 1px solid #d1d5db; background: #fff; }
+        .proxy-health.ok { color: #166534; border-color: #bbf7d0; }
+        .proxy-health.error { color: #991b1b; border-color: #fecaca; }
+        .proxy-health.checking { color: #92400e; border-color: #fde68a; }
+        .dot { width: 8px; height: 8px; border-radius: 999px; background: currentColor; display: inline-block; }
+        .dot.checking { animation: pulse 1.2s ease-in-out infinite; }
         .pill { font-size: 12px; padding: 6px 10px; border-radius: 999px; border: 1px solid #e5e7eb; background: #fff; }
         .pill.connected { color: #166534; border-color: #bbf7d0; }
         .pill.disconnected { color: #991b1b; border-color: #fecaca; }
@@ -479,6 +532,7 @@ export default function IntegrationConfigurationPage() {
         .feedback.error { color: #dc2626; }
         .feedback.warn { color: #92400e; }
         .health-grid p { margin: 0; color: #4b5563; }
+        @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
         @media (max-width: 900px) { .config-shell { padding: 20px; } .grid.two { grid-template-columns: 1fr; } }
       `}</style>
     </main>
