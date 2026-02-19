@@ -110,7 +110,7 @@ export default function IntegrationConfigurationPage() {
   const lockedToDifferentTool = status.configuration_locked && status.tool_type && status.tool_type !== toolType;
   const isZephyr = toolType === "ZEPHYR";
 
-  const commonHeaders = useMemo(() => ({ "Content-Type": "application/json" }), []);
+  const commonHeaders = useMemo(() => ({ "Content-Type": "application/json", "x-user-role": "admin" }), []);
 
   const activeAuthFields = AUTH_FIELDS[authType];
 
@@ -133,8 +133,13 @@ export default function IntegrationConfigurationPage() {
     try {
       const response = await fetch(`/api/v1/integrations/status?tenant_id=${tenantId}`, { headers: commonHeaders });
       if (!response.ok) {
-        setProxyHealth({ state: "error", message: `Proxy check failed (${response.status}).` });
-        throw new Error("Unable to load integration status");
+        const message =
+          response.status === 403
+            ? "Integration status blocked (403). Ensure admin header/session is applied."
+            : `Proxy check failed (${response.status}).`;
+        setProxyHealth({ state: "error", message });
+        setFeedback({ tone: "warn", text: message });
+        return;
       }
 
       const payload = await parseApiPayload<IntegrationStatus>(response);
@@ -143,11 +148,9 @@ export default function IntegrationConfigurationPage() {
       if (payload.auth_type) setAuthType(payload.auth_type);
       setProxyHealth({ state: "ok", message: "API proxy reachable." });
     } catch (error) {
-      setProxyHealth({
-        state: "error",
-        message: error instanceof Error ? error.message : "Proxy check failed.",
-      });
-      throw error;
+      const message = error instanceof Error ? error.message : "Proxy check failed.";
+      setProxyHealth({ state: "error", message });
+      setFeedback({ tone: "warn", text: message });
     }
   };
 
