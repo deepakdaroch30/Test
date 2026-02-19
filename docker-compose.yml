@@ -45,8 +45,6 @@ services:
   frontend:
     image: node:20-alpine
     working_dir: /app
-    environment:
-      - BACKEND_ORIGIN=http://api:8000
     command: sh -c "npm install && npm run dev"
     volumes:
       - ./frontend:/app
