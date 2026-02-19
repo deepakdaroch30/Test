@@ -1,6 +1,6 @@
-# AI-Powered QA Orchestration Platform (MVP Scaffold)
+# Veloryn (MVP Scaffold)
 
-This repository provides a starter implementation for an **AI-driven QA governance and automation orchestration system**.
+This repository provides a starter implementation for an **AI engineering intelligence and automation orchestration platform**.
 
 ## Implemented foundations
 

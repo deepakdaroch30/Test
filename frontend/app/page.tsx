@@ -69,8 +69,8 @@ export default function LoginPage() {
         <div className="shape shape-c" />
 
         <div className="brand-content">
-          <h1>AI-Powered QA Orchestration Platform</h1>
-          <p>Intelligent Quality. Automated Governance.</p>
+          <h1>Veloryn</h1>
+          <p>Veloryn – AI Engineering Intelligence Platform</p>
         </div>
       </section>
 
