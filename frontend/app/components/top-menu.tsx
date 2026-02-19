@@ -18,7 +18,7 @@ export default function TopMenu({ current }: Props) {
     <nav className="top-menu" aria-label="Primary navigation">
       <div className="brand-block" aria-label="Application brand">
         <div>
-          <p className="brand-name">TechMount</p>
+          <p className="brand-name">QA Orchestrator</p>
           <p className="brand-subtitle">AI Quality Hub</p>
         </div>
       </div>
