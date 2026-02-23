@@ -5,6 +5,10 @@ from app.services.integrations.jira import JiraAdapter
 
 
 def get_integration_adapter(tool_type: ToolType) -> BaseIntegrationAdapter:
-    if tool_type == ToolType.jira:
-        return JiraAdapter()
-    return AdoAdapter()
+    match tool_type:
+        case ToolType.jira:
+            return JiraAdapter()
+        case ToolType.azure_devops:
+            return AdoAdapter()
+        case _:
+            raise ValueError(f"Unsupported tool type: {tool_type}")
