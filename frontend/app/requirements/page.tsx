@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import TopMenu from "../components/top-menu";
 
 type GeneratedStory = {
   story_id: string;
@@ -62,7 +61,6 @@ export default function RequirementsIntakePage() {
 
   return (
     <main className="requirements-shell">
-      <TopMenu current="requirements" />
 
       <header>
         <h1>Requirements Intake & Backlog Conversion</h1>

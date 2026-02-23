@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import TopMenu from "../components/top-menu";
 
 type ToolType = "JIRA" | "AZURE_DEVOPS" | "QTEST" | "ZEPHYR" | "TESTRAIL";
 type AuthType = "BASIC" | "OAUTH2" | "PAT" | "TOKEN" | "BEARER";
@@ -74,6 +73,17 @@ const parseApiPayload = async <T,>(response: Response): Promise<T> => {
   throw new Error(
     `Unexpected response from server (${response.status}). Verify backend API routing is configured and returning JSON.${snippet ? ` Response snippet: ${snippet}` : ""}`,
   );
+};
+
+
+const toUserError = (fallback: string, message?: string): string => {
+  if (!message) return fallback;
+  const normalized = message.toLowerCase();
+  const sensitiveHints = ["sqlalchemy", "psycopg", "undefinedtable", "traceback", "select ", "from tenant_integrations"];
+  if (sensitiveHints.some((hint) => normalized.includes(hint))) {
+    return `${fallback} Backend database schema may be missing; please run backend migrations/setup.`;
+  }
+  return message.length > 240 ? `${fallback} Please review backend logs for details.` : message;
 };
 
 const initialStatus: IntegrationStatus = {
@@ -195,14 +205,15 @@ export default function IntegrationConfigurationPage() {
 
         if (!response.ok) {
           throw new Error(
-            result.error ||
-              result.detail ||
-              "Zephyr test failed via proxy. Verify BACKEND_ORIGIN and backend availability.",
+            toUserError(
+              "Zephyr test failed via proxy.",
+              result.error || result.detail || "Verify BACKEND_ORIGIN and backend availability.",
+            ),
           );
         }
 
         if (!result.success) {
-          throw new Error(result.error || result.detail || "Zephyr connection test failed");
+          throw new Error(toUserError("Zephyr connection test failed.", result.error || result.detail));
         }
 
         setConnectionTestPassed(true);
@@ -227,7 +238,7 @@ export default function IntegrationConfigurationPage() {
       });
       const result = await parseApiPayload<{ status?: string; message?: string; detail?: string }>(response);
       if (!response.ok || result.status === "error") {
-        throw new Error(result.detail || result.message || "Connection test failed");
+        throw new Error(toUserError("Connection test failed.", result.detail || result.message));
       }
 
       setConnectionTestPassed(true);
@@ -235,7 +246,7 @@ export default function IntegrationConfigurationPage() {
       await fetchStatus();
     } catch (error) {
       setConnectionTestPassed(false);
-      setFeedback({ tone: "error", text: error instanceof Error ? error.message : "Connection test failed" });
+      setFeedback({ tone: "error", text: error instanceof Error ? toUserError("Connection test failed.", error.message) : "Connection test failed." });
     } finally {
       setIsTesting(false);
     }
@@ -266,14 +277,15 @@ export default function IntegrationConfigurationPage() {
 
         if (!response.ok) {
           throw new Error(
-            result.error ||
-              result.detail ||
-              "Zephyr save failed via proxy. Verify BACKEND_ORIGIN and backend availability.",
+            toUserError(
+              "Unable to save Zephyr configuration.",
+              result.error || result.detail || "Verify BACKEND_ORIGIN and backend availability.",
+            ),
           );
         }
 
         if (!result.success) {
-          throw new Error(result.error || result.detail || result.message || "Unable to save Zephyr configuration");
+          throw new Error(toUserError("Unable to save Zephyr configuration.", result.error || result.detail || result.message));
         }
 
         setFeedback({ tone: "ok", text: "Zephyr configuration saved." });
@@ -299,13 +311,13 @@ export default function IntegrationConfigurationPage() {
         body: JSON.stringify(payload),
       });
       const result = await parseApiPayload<{ message?: string; detail?: string }>(response);
-      if (!response.ok) throw new Error(result.detail || "Unable to save configuration");
+      if (!response.ok) throw new Error(toUserError("Unable to save configuration.", result.detail || result.message));
 
       setFeedback({ tone: "ok", text: result.message || "Integration configuration saved securely." });
       setForm((current) => ({ ...current, credentials: {} }));
       await fetchStatus();
     } catch (error) {
-      setFeedback({ tone: "error", text: error instanceof Error ? error.message : "Save failed" });
+      setFeedback({ tone: "error", text: error instanceof Error ? toUserError("Save failed.", error.message) : "Save failed." });
     } finally {
       setIsSaving(false);
     }
@@ -320,11 +332,11 @@ export default function IntegrationConfigurationPage() {
         headers: commonHeaders,
       });
       const result = await parseApiPayload<{ message?: string; detail?: string }>(response);
-      if (!response.ok) throw new Error(result.detail || "Action failed");
+      if (!response.ok) throw new Error(toUserError("Action failed.", result.detail || result.message));
       setFeedback({ tone: "ok", text: result.message || "Action completed" });
       await fetchStatus();
     } catch (error) {
-      setFeedback({ tone: "error", text: error instanceof Error ? error.message : "Action failed" });
+      setFeedback({ tone: "error", text: error instanceof Error ? toUserError("Action failed.", error.message) : "Action failed." });
     } finally {
       setIsRunningAction(false);
     }
@@ -336,7 +348,7 @@ export default function IntegrationConfigurationPage() {
       const response = await fetch(`/api/v1/integrations/zephyr/testcycles?tenant_id=${tenantId}`, { headers: commonHeaders });
       const result = await parseApiPayload<ZephyrCyclesResponse>(response);
       if (!response.ok || !result.success) {
-        throw new Error(result.error || "Unable to load Zephyr test cycles.");
+        throw new Error(toUserError("Unable to load Zephyr test cycles.", result.error));
       }
 
       const data = result.data;
@@ -344,7 +356,7 @@ export default function IntegrationConfigurationPage() {
       setZephyrCycles(normalized);
       setFeedback({ tone: "ok", text: `Loaded ${normalized.length} Zephyr test cycle(s).` });
     } catch (error) {
-      setFeedback({ tone: "error", text: error instanceof Error ? error.message : "Unable to load Zephyr test cycles." });
+      setFeedback({ tone: "error", text: error instanceof Error ? toUserError("Unable to load Zephyr test cycles.", error.message) : "Unable to load Zephyr test cycles." });
     } finally {
       setIsLoadingCycles(false);
     }
@@ -359,7 +371,6 @@ export default function IntegrationConfigurationPage() {
 
   return (
     <main className="config-shell">
-      <TopMenu current="integration" />
       <header className="header">
         <div>
           <h1>Integration Configuration</h1>
