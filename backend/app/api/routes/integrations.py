@@ -4,7 +4,6 @@ import base64
 import hashlib
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy import select
@@ -151,67 +150,66 @@ def save_integration(
     return IntegrationActionResponse(status="ok", message="Integration configuration saved securely.")
 
 
-@router.get("/status", response_model=IntegrationStatusResponse)
+def _db_tool_connected(db: Session, tenant_id: str, tool_type: str) -> bool:
+    try:
+        integration = db.execute(
+            select(TenantIntegration).where(
+                TenantIntegration.tenant_id == tenant_id,
+                TenantIntegration.tool_type == tool_type,
+            )
+        ).scalar_one_or_none()
+    except Exception:
+        return False
+
+    return bool(integration and integration.integration_status == "CONNECTED")
+
+
+def is_workspace_ready(db: Session, tenant_id: str) -> bool:
+    jira_connected = _db_tool_connected(db, tenant_id, "JIRA")
+    zephyr_connected = _db_tool_connected(db, tenant_id, "ZEPHYR")
+    return jira_connected and zephyr_connected
+
+
+@router.get("/status")
 def get_integration_status(
     tenant_id: str,
     x_user_role: str = Header(default="qa_engineer"),
     db: Session = Depends(get_db),
-) -> IntegrationStatusResponse:
+) -> dict[str, object]:
     _require_admin(x_user_role)
 
-    db_integration = None
-    try:
-        tenant_uuid = UUID(tenant_id)
-    except ValueError:
-        tenant_uuid = None
+    jira_connected = _db_tool_connected(db, tenant_id, "JIRA")
+    zephyr_connected = _db_tool_connected(db, tenant_id, "ZEPHYR")
 
-    if tenant_uuid is not None:
-        db_integration = db.execute(
-            select(TenantIntegration).where(
-                TenantIntegration.tenant_id == tenant_uuid,
-                TenantIntegration.tool_type == "ZEPHYR",
-            )
-        ).scalar_one_or_none()
+    # Backward-compatible shape for existing UI
+    if zephyr_connected:
+        tool_type = "ZEPHYR"
+        auth_type = "BEARER"
+        integration_status = IntegrationState.connected
+    elif jira_connected:
+        tool_type = "JIRA"
+        auth_type = "BASIC"
+        integration_status = IntegrationState.connected
+    else:
+        stored = TENANT_INTEGRATIONS.get(tenant_id, {})
+        tool_type = stored.get("tool_type")
+        auth_type = stored.get("auth_type")
+        integration_status = stored.get("integration_status", IntegrationState.disconnected)
 
-    if db_integration is not None:
-        connected = db_integration.integration_status == "CONNECTED"
-        return IntegrationStatusResponse(
-            tenant_id=tenant_id,
-            tool_type="ZEPHYR",
-            auth_type="BEARER",
-            integration_status=IntegrationState.connected if connected else IntegrationState.disconnected,
-            last_successful_sync=None,
-            last_tested_timestamp=db_integration.last_tested_at.isoformat() if db_integration.last_tested_at else None,
-            last_error_message=None if connected else "Zephyr integration test failed",
-            connected=connected,
-            configuration_locked=True,
-        )
-
-    stored = TENANT_INTEGRATIONS.get(tenant_id)
-    if not stored:
-        return IntegrationStatusResponse(
-            tenant_id=tenant_id,
-            tool_type=None,
-            auth_type=None,
-            integration_status=IntegrationState.disconnected,
-            last_successful_sync=None,
-            last_tested_timestamp=None,
-            last_error_message=None,
-            connected=False,
-            configuration_locked=False,
-        )
-
-    return IntegrationStatusResponse(
-        tenant_id=tenant_id,
-        tool_type=stored.get("tool_type"),
-        auth_type=stored.get("auth_type"),
-        integration_status=stored.get("integration_status", IntegrationState.disconnected),
-        last_successful_sync=stored.get("last_successful_sync"),
-        last_tested_timestamp=stored.get("last_tested_timestamp"),
-        last_error_message=stored.get("last_error_message"),
-        connected=stored.get("integration_status") == IntegrationState.connected,
-        configuration_locked=bool(stored.get("tool_type")),
-    )
+    return {
+        "tenant_id": tenant_id,
+        "tool_type": tool_type,
+        "auth_type": auth_type,
+        "integration_status": integration_status,
+        "last_successful_sync": None,
+        "last_tested_timestamp": None,
+        "last_error_message": None,
+        "connected": bool(jira_connected or zephyr_connected),
+        "configuration_locked": bool(jira_connected or zephyr_connected),
+        "jira_connected": jira_connected,
+        "zephyr_connected": zephyr_connected,
+        "workspace_ready": is_workspace_ready(db, tenant_id),
+    }
 
 
 @router.post("/reconnect", response_model=IntegrationActionResponse)

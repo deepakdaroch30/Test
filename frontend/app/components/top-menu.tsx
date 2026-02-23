@@ -23,7 +23,7 @@ export default function TopMenu({ current }: Props) {
         </div>
       </div>
 
-      <div className="menu-links">
+      <div className="menu-links" role="menubar" aria-orientation="vertical">
         <Link href="/workspace" className={`menu-link ${current === "workspace" ? "active" : ""}`}>
           Workspace
         </Link>
@@ -47,13 +47,15 @@ export default function TopMenu({ current }: Props) {
           background: #ffffff;
           border: 1px solid #e5e7eb;
           border-radius: 12px;
-          padding: 8px 10px;
-          display: grid;
-          grid-template-columns: auto 1fr auto;
-          align-items: center;
-          gap: 16px;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 12px;
           box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
           margin-bottom: 14px;
+          width: fit-content;
+          min-width: 260px;
         }
 
         .brand-block {
@@ -79,9 +81,10 @@ export default function TopMenu({ current }: Props) {
         }
 
         .menu-links {
-          display: inline-flex;
+          display: flex;
+          flex-direction: column;
           gap: 6px;
-          flex-wrap: wrap;
+          width: 100%;
         }
 
         .menu-link {
@@ -91,8 +94,10 @@ export default function TopMenu({ current }: Props) {
           font-weight: 600;
           border-radius: 8px;
           padding: 8px 12px;
-          display: inline-flex;
+          display: flex;
           align-items: center;
+          width: 100%;
+          box-sizing: border-box;
         }
         .menu-link:hover {
           background: #eef2ff;
@@ -121,7 +126,8 @@ export default function TopMenu({ current }: Props) {
 
         @media (max-width: 980px) {
           .top-menu {
-            grid-template-columns: 1fr;
+            min-width: 0;
+            width: 100%;
           }
 
           .brand-block {

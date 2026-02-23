@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import ai, auth, dashboard, dod, integrations, integrations_zephyr, project_overview, projects, rtm, stories, testcases, workspace
+from app.api.routes import ai, auth, dashboard, dod, integrations, integrations_jira, integrations_zephyr, project_overview, projects, rtm, stories, testcases, workspace
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -16,3 +16,4 @@ api_router.include_router(workspace.router, prefix="/workspace", tags=["workspac
 api_router.include_router(project_overview.router, prefix="/project", tags=["project-overview"])
 
 api_router.include_router(integrations_zephyr.router, prefix="/integrations/zephyr", tags=["integrations-zephyr"])
+api_router.include_router(integrations_jira.router, prefix="/integrations/jira", tags=["integrations-jira"])
