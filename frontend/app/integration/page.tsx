@@ -21,6 +21,12 @@ type IntegrationStatus = {
 
 type FieldConfig = { key: string; label: string; sensitive?: boolean; optional?: boolean };
 
+type ZephyrCyclesResponse = {
+  success?: boolean;
+  data?: Array<Record<string, unknown>> | Record<string, unknown>;
+  error?: string;
+};
+
 const TOOL_AUTH_OPTIONS: Record<ToolType, AuthType[]> = {
   JIRA: ["BASIC", "OAUTH2", "TOKEN"],
   AZURE_DEVOPS: ["PAT", "OAUTH2"],
@@ -92,6 +98,8 @@ export default function IntegrationConfigurationPage() {
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRunningAction, setIsRunningAction] = useState(false);
+  const [isLoadingCycles, setIsLoadingCycles] = useState(false);
+  const [zephyrCycles, setZephyrCycles] = useState<Array<Record<string, unknown>>>([]);
   const [proxyHealth, setProxyHealth] = useState<{ state: "checking" | "ok" | "error"; message: string }>({
     state: "checking",
     message: "Checking API proxy...",
@@ -120,6 +128,10 @@ export default function IntegrationConfigurationPage() {
     setForm((current) => ({ ...current, credentials: {} }));
     setConnectionTestPassed(false);
   }, [toolType]);
+
+  useEffect(() => {
+    document.title = "Integration Configuration | Veloryn";
+  }, []);
 
   const updateCredential = (key: string, value: string) => {
     setForm((current) => ({
@@ -318,6 +330,26 @@ export default function IntegrationConfigurationPage() {
     }
   };
 
+  const loadZephyrCycles = async () => {
+    setIsLoadingCycles(true);
+    try {
+      const response = await fetch(`/api/v1/integrations/zephyr/testcycles?tenant_id=${tenantId}`, { headers: commonHeaders });
+      const result = await parseApiPayload<ZephyrCyclesResponse>(response);
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to load Zephyr test cycles.");
+      }
+
+      const data = result.data;
+      const normalized = Array.isArray(data) ? data : data ? [data] : [];
+      setZephyrCycles(normalized);
+      setFeedback({ tone: "ok", text: `Loaded ${normalized.length} Zephyr test cycle(s).` });
+    } catch (error) {
+      setFeedback({ tone: "error", text: error instanceof Error ? error.message : "Unable to load Zephyr test cycles." });
+    } finally {
+      setIsLoadingCycles(false);
+    }
+  };
+
   const statusLabel =
     status.integration_status === "connected"
       ? "Connected"
@@ -503,6 +535,23 @@ export default function IntegrationConfigurationPage() {
         </div>
       </section>
 
+      {isZephyr && (
+        <section className="card">
+          <h2>Zephyr Test Cycles</h2>
+          <p className="tenant">Use this section to verify and inspect cycles returned by Zephyr Cloud.</p>
+          <div className="actions">
+            <button className="btn secondary" type="button" onClick={loadZephyrCycles} disabled={isLoadingCycles}>
+              {isLoadingCycles ? "Loading..." : "Load Test Cycles"}
+            </button>
+          </div>
+          {zephyrCycles.length > 0 ? (
+            <pre className="cycles-pre">{JSON.stringify(zephyrCycles, null, 2)}</pre>
+          ) : (
+            <p className="tenant">No cycles loaded yet.</p>
+          )}
+        </section>
+      )}
+
       <style jsx>{`
         .config-shell { min-height: 100vh; background: #f8fafc; color: #1f2937; padding: 32px; font-family: Inter, Segoe UI, Arial, sans-serif; }
         .header h1 { margin: 0; color: #1e3a8a; font-size: 30px; }
@@ -535,6 +584,7 @@ export default function IntegrationConfigurationPage() {
         .feedback.error { color: #dc2626; }
         .feedback.warn { color: #92400e; }
         .health-grid p { margin: 0; color: #4b5563; }
+        .cycles-pre { margin-top: 12px; background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 12px; overflow: auto; font-size: 12px; max-height: 320px; }
         @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
         @media (max-width: 900px) { .config-shell { padding: 20px; } .grid.two { grid-template-columns: 1fr; } }
       `}</style>

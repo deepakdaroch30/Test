@@ -12,6 +12,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/qa_orchestrator
       - REDIS_URL=redis://redis:6379/0
+      - ENCRYPTION_KEY=zV7j4A6Yp5wN8Q2mCkT3uHf1B9xLr0sDqWeRtYuIoPk=
     depends_on:
       - db
       - redis
@@ -22,6 +23,8 @@ services:
     command: celery -A app.workers.celery_app worker -l info
     volumes:
       - ./backend:/app
+    environment:
+      - ENCRYPTION_KEY=zV7j4A6Yp5wN8Q2mCkT3uHf1B9xLr0sDqWeRtYuIoPk=
     depends_on:
       - redis
       - db
