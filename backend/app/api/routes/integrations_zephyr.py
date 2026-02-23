@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+
 import requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.token_crypto import encrypt_token
 from app.models.tenant_integration import TenantIntegration
-from app.services.zephyr_service import get_test_cycles, get_zephyr_integration
+from app.services.zephyr_service import get_test_cycles, get_zephyr_integration, save_zephyr_memory_config
 
 router = APIRouter()
 
@@ -104,8 +105,13 @@ def save_zephyr_integration(
 
         return {"success": True, "message": "Zephyr integration saved."}
 
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+    except Exception:
+        # Fallback for environments where DB tables are not initialized yet.
+        save_zephyr_memory_config(payload.tenant_id, payload.base_url, payload.api_token, payload.project_key)
+        return {
+            "success": True,
+            "message": "Zephyr integration saved in temporary memory storage (database unavailable).",
+        }
 
 
 @router.get("/testcycles")

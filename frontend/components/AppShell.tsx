@@ -1,11 +1,19 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import Sidebar from "./Sidebar";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isLoginPage = pathname === "/";
+
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
 
   const sidebarWidth = isCollapsed ? 70 : 260;
 
