@@ -28,7 +28,13 @@ type WorkspaceResponse = {
   integration_status_message: string;
   last_sync_time: string;
   can_configure_integration: boolean;
-  projects: WorkspaceProject[];
+  data: WorkspaceProject[];
+};
+
+type WorkspaceApiResponse = {
+  success: boolean;
+  data?: WorkspaceProject[];
+  error?: string;
 };
 
 const fallbackData: WorkspaceResponse = {
@@ -38,7 +44,7 @@ const fallbackData: WorkspaceResponse = {
   integration_status_message: "Connected to Jira",
   last_sync_time: new Date().toISOString(),
   can_configure_integration: true,
-  projects: [
+  data: [
     {
       project_id: "tenant-acme-JIRA-101",
       project_name: "Payments QA",
@@ -128,9 +134,11 @@ export default function WorkspaceDashboardPage() {
           throw new Error("Failed to load workspace data.");
         }
 
-        const payload = (await response.json()) as WorkspaceResponse;
+        const payload = (await response.json()) as WorkspaceApiResponse;
         if (active) {
-          setData(payload);
+          console.log("Workspace API response:", payload);
+          const projects = payload?.data ?? [];
+          setData({ ...fallbackData, data: projects });
         }
       } catch {
         if (active) {
@@ -151,17 +159,18 @@ export default function WorkspaceDashboardPage() {
   }, []);
 
   const model = data ?? fallbackData;
-  const toolLabel = model.integration_type === "JIRA" ? "Connected to Jira" : "Connected to Azure DevOps";
-  const toolIcon = model.integration_type === "JIRA" ? "J" : "A";
-  const syncLabel = useMemo(() => new Date(model.last_sync_time).toLocaleString(), [model.last_sync_time]);
-  const syncFreshness = getSyncFreshness(model.last_sync_time);
+  const toolLabel = model?.integration_type === "JIRA" ? "Connected to Jira" : "Connected to Azure DevOps";
+  const toolIcon = model?.integration_type === "JIRA" ? "J" : "A";
+  const syncLabel = useMemo(() => new Date(model?.last_sync_time ?? fallbackData.last_sync_time).toLocaleString(), [model?.last_sync_time]);
+  const syncFreshness = getSyncFreshness(model?.last_sync_time ?? fallbackData.last_sync_time);
 
   const visibleProjects = useMemo(() => {
-    return [...model.projects]
-      .sort((a, b) => HEALTH_SEVERITY[a.sprint_health_score] - HEALTH_SEVERITY[b.sprint_health_score])
-      .filter((project) => activeHealthFilter === "all" || project.sprint_health_score === activeHealthFilter)
-      .filter((project) => activeFrameworkFilter === "all" || project.framework_type === activeFrameworkFilter);
-  }, [activeFrameworkFilter, activeHealthFilter, model.projects]);
+    const projects = model?.data || [];
+    return [...projects]
+      .sort((a, b) => HEALTH_SEVERITY[a?.sprint_health_score ?? "red"] - HEALTH_SEVERITY[b?.sprint_health_score ?? "red"])
+      .filter((project) => activeHealthFilter === "all" || project?.sprint_health_score === activeHealthFilter)
+      .filter((project) => activeFrameworkFilter === "all" || project?.framework_type === activeFrameworkFilter);
+  }, [activeFrameworkFilter, activeHealthFilter, model?.data]);
 
   return (
     <main className="workspace-shell">
@@ -232,21 +241,21 @@ export default function WorkspaceDashboardPage() {
       ) : (
         <section className="project-grid">
           {visibleProjects.map((project) => {
-            const health = healthDetails[project.sprint_health_score];
-            const ctaLabel = project.sprint_health_score === "red" ? "Review Issues" : project.sprint_health_score === "amber" ? "Investigate Risks" : "View Details";
+            const health = healthDetails[project?.sprint_health_score ?? "red"];
+            const ctaLabel = project?.sprint_health_score === "red" ? "Review Issues" : project?.sprint_health_score === "amber" ? "Investigate Risks" : "View Details";
             return (
-              <article key={project.project_id} className={`project-card ${project.sprint_health_score}`}>
+              <article key={project.project_id} className={`project-card ${project?.sprint_health_score ?? "red"}`}>
                 <div className="card-head">
-                  <h2>{project.project_name}</h2>
+                  <h2>{project?.project_name}</h2>
                   <div className="card-actions">
                     <span className="tool-mini">{project.integration_type === "JIRA" ? "Jira" : "ADO"}</span>
-                    <button className="quick-menu" aria-label={`Quick actions for ${project.project_name}`} onClick={() => window.alert("Quick actions: Open overview, trigger sync, assign owner")}>⋯</button>
+                    <button className="quick-menu" aria-label={`Quick actions for ${project?.project_name}`} onClick={() => window.alert("Quick actions: Open overview, trigger sync, assign owner")}>⋯</button>
                   </div>
                 </div>
-                <p className="sprint">Active sprint: {project.active_sprint}</p>
+                <p className="sprint">Active sprint: {project?.active_sprint}</p>
 
-                <div className="health-row" aria-label={`Sprint health ${health.label}`}>
-                  <span className={`health-chip ${project.sprint_health_score}`}>
+                <div className="health-row" aria-label={`Sprint health ${health?.label}`}>
+                  <span className={`health-chip ${project?.sprint_health_score ?? "red"}`}>
                     <span className="health-icon" aria-hidden="true">{health.icon}</span>
                     {health.label}
                   </span>
@@ -256,37 +265,37 @@ export default function WorkspaceDashboardPage() {
                 <div className="metric-row">
                   <div>
                     <span className="label">Test Coverage</span>
-                    <strong>{project.test_coverage_percent}%</strong>
-                    <div className="meter" role="img" aria-label={`Test coverage ${project.test_coverage_percent} percent, target ${TARGETS.testCoverage}`}>
-                      <span style={{ width: `${project.test_coverage_percent}%` }} />
+                    <strong>{project?.test_coverage_percent ?? 0}%</strong>
+                    <div className="meter" role="img" aria-label={`Test coverage ${project?.test_coverage_percent ?? 0} percent, target ${TARGETS.testCoverage}`}>
+                      <span style={{ width: `${project?.test_coverage_percent ?? 0}%` }} />
                     </div>
-                    <span className="sub-label">Target: {TARGETS.testCoverage}% · {trendForMetric(project.test_coverage_percent, TARGETS.testCoverage)}</span>
+                    <span className="sub-label">Target: {TARGETS.testCoverage}% · {trendForMetric(project?.test_coverage_percent ?? 0, TARGETS.testCoverage)}</span>
                   </div>
                   <div>
                     <span className="label">Automation Coverage</span>
-                    <strong>{project.automation_coverage_percent}%</strong>
-                    <div className="meter" role="img" aria-label={`Automation coverage ${project.automation_coverage_percent} percent, target ${TARGETS.automationCoverage}`}>
-                      <span style={{ width: `${project.automation_coverage_percent}%` }} />
+                    <strong>{project?.automation_coverage_percent ?? 0}%</strong>
+                    <div className="meter" role="img" aria-label={`Automation coverage ${project?.automation_coverage_percent ?? 0} percent, target ${TARGETS.automationCoverage}`}>
+                      <span style={{ width: `${project?.automation_coverage_percent ?? 0}%` }} />
                     </div>
-                    <span className="sub-label">Target: {TARGETS.automationCoverage}% · {trendForMetric(project.automation_coverage_percent, TARGETS.automationCoverage)}</span>
+                    <span className="sub-label">Target: {TARGETS.automationCoverage}% · {trendForMetric(project?.automation_coverage_percent ?? 0, TARGETS.automationCoverage)}</span>
                   </div>
                 </div>
 
                 <div className="metric-row">
                   <div>
                     <span className="label">Framework</span>
-                    <strong>{project.framework_type}</strong>
+                    <strong>{project?.framework_type}</strong>
                   </div>
                   <div>
                     <span className="label">Last Sync</span>
-                    <strong>{new Date(project.last_sync_time).toLocaleString()}</strong>
+                    <strong>{new Date(project?.last_sync_time ?? fallbackData.last_sync_time).toLocaleString()}</strong>
                   </div>
                 </div>
 
                 <button
                   className="btn"
-                  disabled={!project.can_enter_project}
-                  onClick={() => router.push(`/project/${project.project_id}/overview`)}
+                  disabled={!project?.can_enter_project}
+                  onClick={() => router.push(`/project/${project?.project_id}/overview`)}
                 >
                   {ctaLabel}
                 </button>
