@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset='utf-8'/><meta name='viewport' content='width=device-width, initial-scale=1'/><title>Automation Workbench</title><link rel='stylesheet' href='styles.css'></head><body><div class='layout'><aside class='sidebar'><h3 class='brand'>Veloryn</h3><nav class='nav'><a href='index.html'>Preview Hub</a><a href='project-initialization.html'>Project Initialization</a><a href='sprint-ingestion.html'>Sprint Ingestion</a><a href='requirement-analyzer.html'>Requirement Analyzer</a><a href='test-case-generation.html'>Test Case Generation</a><a class='active' href='automation-workbench.html'>Automation Workbench</a><a href='rtm-dod.html'>RTM + DoD</a><a href='quality-dashboard.html'>Quality Dashboard</a><a href='admin-settings.html'>Admin Settings</a></nav></aside>
+<main class='content'><div class='header'><div><h1 class='h1'>Automation Script Workbench</h1><div class='sub'>POM script preview, manual edits, branch push, and PR creation.</div></div><button class='btn'>Generate Scripts</button></div>
+<div class='grid cols-2'><section class='card'><h3>Generated Script (Playwright)</h3><pre style='white-space:pre-wrap;color:#bdd2ff;background:#0f1731;border:1px solid #2a3968;border-radius:8px;padding:12px'>test('payment retry handles transient failure', async ({ page }) => {
+  const payment = new PaymentPage(page);
+  await payment.goto();
+  await payment.submitInvalidAmount();
+  await expect(payment.errorToast).toContainText('Invalid amount');
+});</pre><div style='display:flex;gap:8px'><button class='btn secondary'>Edit</button><button class='btn'>Approve Script</button></div></section>
+<section class='card stack'><h3>Git Sync</h3><div class='field'><label>Repository</label><input value='org/qa-orchestrator'></div><div class='field'><label>Branch</label><input value='feature/qa-142-automation'></div><div class='field'><label>PR Title</label><input value='Add Playwright tests for QA-142 negative paths'></div><div style='display:flex;gap:8px;justify-content:flex-end'><button class='btn secondary'>Commit</button><button class='btn'>Create Pull Request</button></div></section></div>
+</main></div></body></html>
