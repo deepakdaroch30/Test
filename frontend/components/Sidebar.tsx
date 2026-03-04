@@ -15,6 +15,7 @@ const navItems = [
   { href: "/integration", label: "Integration Configuration", icon: "🔌", match: (path: string) => path.startsWith("/integration") },
   { href: "/project/tenant-acme-JIRA-101/overview", label: "Project Overview", icon: "📊", match: (path: string) => path.startsWith("/project/") },
   { href: "/requirements", label: "Requirements Intake", icon: "🧾", match: (path: string) => path.startsWith("/requirements") },
+  { href: "/story-selection", label: "Story Selection", icon: "✅", match: (path: string) => path.startsWith("/story-selection") },
 ];
 
 export default function Sidebar({ isCollapsed, isMobileOpen, onToggleCollapse, onCloseMobile }: SidebarProps) {
